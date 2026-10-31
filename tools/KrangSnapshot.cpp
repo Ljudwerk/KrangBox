@@ -19,20 +19,20 @@ int main (int argc, char* argv[])
     panel.setLookAndFeel (&lf);
     panel.setSize (900, 230);
 
-    panel.cutoff.slider.setRange (20.0, 18000.0);
-    panel.cutoff.slider.setSkewFactor (0.25);
-    panel.cutoff.slider.setValue (400.0);
-    panel.cutoff.slider.setTextValueSuffix (" Hz");
-    panel.cutoff.slider.setNumDecimalPlacesToDisplay (0);
-    panel.resonance.slider.setRange (0.0, 1.0);
-    panel.resonance.slider.setValue (0.45);
-    panel.resonance.slider.setNumDecimalPlacesToDisplay (2);
+    panel.katedral.slider.setRange (0.0, 100.0);
+    panel.katedral.slider.setValue (15.0);
+    panel.katedral.slider.setTextValueSuffix (" %");
+    panel.katedral.slider.setNumDecimalPlacesToDisplay (0);
+    panel.master.slider.setRange (-48.0, 6.0);
+    panel.master.slider.setValue (0.0);
+    panel.master.slider.setTextValueSuffix (" dB");
+    panel.master.slider.setNumDecimalPlacesToDisplay (1);
     panel.drive.slider.setRange (0.0, 48.0);
     panel.drive.slider.setValue (18.0);
     panel.drive.slider.setTextValueSuffix (" dB");
     panel.drive.slider.setNumDecimalPlacesToDisplay (1);
 
-    panel.display.setLines ("BASMALEN  ROR", "CUTOFF  400 HZ");
+    panel.display.setLines (juce::String::fromUTF8 ("Ångvisslan"), "DRIVE  18.0 DB");
     panel.meter.setLevelImmediate (krang::ui::dbToGain (-4.0f));
 
     const auto image = panel.createComponentSnapshot (panel.getLocalBounds(), true, scale);

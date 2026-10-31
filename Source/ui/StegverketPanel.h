@@ -217,6 +217,10 @@ public:
         grid.setBounds (r.reduced (0, 4));
     }
 
+    // Rutnätets placering (för att linjera röstrattar mot spåren i Hammarverket-panelen).
+    juce::Rectangle<int> getGridBounds() const { return grid.getBounds(); }
+    static constexpr int gridLabelWidth = 112;
+
     juce::TextButton play { "SPELA" };
     juce::Slider tempo, swing;
     juce::ComboBox length;

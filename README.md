@@ -4,9 +4,22 @@
 
 Instrument-plugin (VST3, AU, CLAP) och fristående app för macOS. Allt ljud är syntetiskt.
 
-**Status: fas 0 klar i kod, fas 1 påbörjad.** Två kammare: Basmålen (bas) och Hammarverket (trummaskin). Båda går genom Krangdistortion och är spelbara via MIDI i en DAW eller med det inbyggda virtuella keyboardet. Överst sitter Krang-stilprovet (rattar, VFD-display och VU-mätare); under det ett generiskt testgränssnitt med alla parametrar.
+**Status: fas 2 påbörjad – Krang-panelen.** Fas 0 och 1 klara i kod. Två kammare: Basmålen (bas) och Hammarverket (trummaskin med Stegverket). Alla parametrar sitter nu på en egen frontpanel i Krang-stil, som skalas proportionellt mellan 60 och 160 %.
 
-![Krang-stilprovet](docs/stilprov.png)
+![Krang-panelen med Basmålen](docs/krangpanelen_basmalen.png)
+
+## Krang-panelen
+
+Panelen ritas i en fast designstorlek (1200 × 850) och skalas när du drar i fönstrets hörn. Uppifrån:
+
+- **Frontpanelen:** display, kammarväljare, presets och tre stora rattar som gäller båda kamrarna: **Krangdrive** (distortionens drive), **Katedral** (reverbens mix) och **Master**. VU-mätaren visar utnivån.
+- **Kammaren:** med Basmålen vald visas oscillatorer, rörelse, filter och två envelopes (faders). Med Hammarverket vald visas Stegverket och, i linje med varje spår, rösternas Stämning, Klang och Nivå, samt Rost.
+- **Ångledningen:** Krangdistortion → Ångfilter → Katedralreverb, sammankopplade med kopparrör. Läget väljs i listan i varje modul.
+- **Keyboardet** längst ned.
+
+Displayen visar presetets namn och den parameter du senast rörde. Dubbelklick på en ratt eller fader återställer standardvärdet; små rattar och faders visar värdet medan du drar.
+
+![Krang-panelen med Hammarverket](docs/krangpanelen_hammarverket.png)
 
 ## Bygga lokalt
 
@@ -180,13 +193,14 @@ Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar ba
 | `Source/dsp/Angledningen.h` | Ångfilter och Katedralreverb (mono in, stereo ut) | Justine |
 | `Source/dsp/KrangEngine.h` | Kopplar ihop kammare, effekter, DC-spärr och limiter | Justine |
 | `Source/Parameters.h` | Parameterträdet – ID:n får aldrig döpas om | Justine |
-| `Source/ui/KrangStyle.h` | Krang-stilprov: LookAndFeel, ratt, VFD-display, VU-mätare | Philip |
+| `Source/ui/KrangStyle.h` | Krang-stil: LookAndFeel, ratt, fader, modulram, kopparrör, VFD-display, VU-mätare, frontpanel | Philip |
+| `Source/ui/Panels.h` | Modulerna: Basmålen, Hammarverket (röster + Stegverket), Ångledningen | Philip |
 | `Source/ui/StegverketPanel.h` | Stegverkets lamprutnät och transport | Philip |
 | `Source/presets/` | Fabrikspresets och PresetManager (spara, ladda, DAW-program) | Doktor Krang |
-| `Source/PluginEditor.*` | Stilprov + testgränssnitt + virtuellt keyboard, ersätts av Krang-panelen i fas 2 | Philip |
+| `Source/PluginEditor.*` | Krang-panelen: skalning, koppling av alla parametrar, presets, keyboard | Philip |
 | `tools/KrangRender.cpp` | Offline-rendering för lyssningstest och CI | Doktor Krang |
 | `tools/KrangSnapshot.cpp` | Ritar stilprovet till PNG för granskning utan DAW | Philip |
-| `docs/` | Bilder på stilprov och testgränssnitt | – |
+| `docs/` | Bilder på Krang-panelen, stilprovet och Stegverket | – |
 | `.github/workflows/` | macOS-bygge, renderingstest och pluginval | Justine |
 
 ## Licens

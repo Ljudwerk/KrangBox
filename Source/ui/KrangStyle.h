@@ -74,6 +74,20 @@ public:
         setColour (juce::Slider::textBoxTextColourId, colours::engraving);
         setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
         setColour (juce::Label::textColourId, colours::engraving);
+        setColour (juce::ComboBox::backgroundColourId, colours::bakelite);
+        setColour (juce::ComboBox::textColourId, colours::engraving);
+        setColour (juce::ComboBox::outlineColourId, colours::brass);
+        setColour (juce::ComboBox::arrowColourId, colours::brass);
+        setColour (juce::PopupMenu::backgroundColourId, colours::chassisHigh);
+        setColour (juce::PopupMenu::textColourId, colours::engraving);
+        setColour (juce::PopupMenu::headerTextColourId, colours::brass);
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, colours::tubeOrange.withAlpha (0.6f));
+        setColour (juce::TextButton::buttonColourId, colours::chassisHigh);
+        setColour (juce::TextButton::textColourOffId, colours::engraving);
+        setColour (juce::TooltipWindow::backgroundColourId, colours::bakelite);
+        setColour (juce::TooltipWindow::textColourId, colours::vfdText);
+        setColour (juce::BubbleComponent::backgroundColourId, colours::bakelite);
+        setColour (juce::BubbleComponent::outlineColourId, colours::brass);
     }
 
     // Bakelitratt i mässingsring, med graverad skala och rörorange värdebåge.
@@ -141,6 +155,40 @@ public:
         g.drawLine ({ c.getPointOnCircumference (rCap * 0.25f, angle), c.getPointOnCircumference (rCap * 0.92f, angle) }, 2.4f);
     }
 
+    // Fader för envelopes: mörkt spår i mässingsram, bakelitgrepp med vit linje.
+    void drawLinearSlider (juce::Graphics& g, int x, int y, int w, int h, float pos, float, float,
+                           juce::Slider::SliderStyle style, juce::Slider& s) override
+    {
+        if (style != juce::Slider::LinearVertical)
+        {
+            LookAndFeel_V4::drawLinearSlider (g, x, y, w, h, pos, 0, 0, style, s);
+            return;
+        }
+        using namespace juce;
+        const float cx = (float) x + (float) w * 0.5f;
+        auto slot = Rectangle<float> (cx - 3.0f, (float) y, 6.0f, (float) h);
+        g.setColour (colours::bakelite);
+        g.fillRoundedRectangle (slot, 3.0f);
+        g.setColour (colours::brassDark);
+        g.drawRoundedRectangle (slot, 3.0f, 1.0f);
+        g.setColour (colours::tubeOrange.withAlpha (0.8f));
+        g.fillRoundedRectangle (slot.withTop (pos).reduced (1.5f, 0), 2.0f);
+
+        auto cap = Rectangle<float> ((float) juce::jmin (w - 4, 26), 14.0f).withCentre ({ cx, pos });
+        ColourGradient grad (colours::chassisHigh.brighter (0.2f), 0, cap.getY(), colours::bakelite, 0, cap.getBottom(), false);
+        g.setGradientFill (grad);
+        g.fillRoundedRectangle (cap, 2.5f);
+        g.setColour (colours::brass);
+        g.drawRoundedRectangle (cap, 2.5f, 1.0f);
+        g.setColour (colours::engraving);
+        g.drawHorizontalLine ((int) cap.getCentreY(), cap.getX() + 3.0f, cap.getRight() - 3.0f);
+    }
+
+    int getSliderThumbRadius (juce::Slider& s) override
+    {
+        return s.getSliderStyle() == juce::Slider::LinearVertical ? 7 : LookAndFeel_V4::getSliderThumbRadius (s);
+    }
+
     juce::Label* createSliderTextBox (juce::Slider& s) override
     {
         auto* l = LookAndFeel_V4::createSliderTextBox (s);
@@ -152,14 +200,54 @@ public:
     }
 };
 
+// Versaler som klarar å, ä, ö oavsett system.
+inline juce::String VfdDisplay_upper (const juce::String& s)
+{
+    return s.toUpperCase()
+            .replace (juce::String::fromUTF8 ("å"), juce::String::fromUTF8 ("Å"))
+            .replace (juce::String::fromUTF8 ("ä"), juce::String::fromUTF8 ("Ä"))
+            .replace (juce::String::fromUTF8 ("ö"), juce::String::fromUTF8 ("Ö"));
+}
+
+// Modulram: graverad rubrik, tunn mässingslist och nitar i hörnen.
+inline void drawModuleFrame (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& title)
+{
+    g.setColour (colours::chassisHigh.withAlpha (0.55f));
+    g.fillRoundedRectangle (r, 6.0f);
+    g.setColour (colours::brassDark);
+    g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.2f);
+    g.setColour (colours::brass.withAlpha (0.35f));
+    g.drawHorizontalLine ((int) r.getY() + 24, r.getX() + 10.0f, r.getRight() - 10.0f);
+    g.setColour (colours::engraving);
+    g.setFont (panelFont (12.0f));
+    g.drawText (VfdDisplay_upper (title), r.withHeight (24.0f).reduced (12.0f, 0), juce::Justification::centredLeft);
+    for (auto p : { r.getTopLeft().translated (6, 6), r.getTopRight().translated (-6, 6),
+                    r.getBottomLeft().translated (6, -6), r.getBottomRight().translated (-6, -6) })
+        drawRivet (g, p, 2.5f);
+}
+
+// Kopparrör mellan två moduler (horisontellt), med flänsar.
+inline void drawCopperPipe (juce::Graphics& g, float x0, float x1, float y)
+{
+    juce::ColourGradient pipe (colours::copper.brighter (0.4f), 0, y - 5.0f, colours::copper.darker (0.6f), 0, y + 5.0f, false);
+    g.setGradientFill (pipe);
+    g.fillRect (juce::Rectangle<float> (x0, y - 5.0f, x1 - x0, 10.0f));
+    g.setColour (colours::brassDark);
+    for (float x : { x0 + 2.0f, x1 - 6.0f })
+        g.fillRoundedRectangle (x, y - 8.0f, 4.0f, 16.0f, 1.5f);
+}
+
 // --- Ratt med graverad etikett ----------------------------------------------
 class KrangKnob : public juce::Component
 {
 public:
-    explicit KrangKnob (const juce::String& labelText) : label (labelText.toUpperCase())
+    explicit KrangKnob (const juce::String& labelText, bool showValue = true) : label (VfdDisplay_upper (labelText))
     {
         slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 90, 18);
+        slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        slider.setColour (juce::Slider::textBoxTextColourId, colours::engraving.withAlpha (0.85f));
+        if (showValue) slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 90, 18);
+        else           slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
         slider.setRotaryParameters (juce::degreesToRadians (225.0f), juce::degreesToRadians (495.0f), true);
         slider.setDoubleClickReturnValue (true, 0.0);
         addAndMakeVisible (slider);
@@ -167,12 +255,15 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        if (label.isEmpty()) return;
         g.setColour (colours::engraving);
-        g.setFont (panelFont (12.5f));
+        g.setFont (panelFont (labelSize));
         g.drawText (label, getLocalBounds().removeFromTop (18), juce::Justification::centred);
     }
 
-    void resized() override { slider.setBounds (getLocalBounds().withTrimmedTop (18)); }
+    void resized() override { slider.setBounds (getLocalBounds().withTrimmedTop (label.isEmpty() ? 0 : 18)); }
+
+    float labelSize = 12.5f;
 
     juce::Slider slider;
 
@@ -382,7 +473,7 @@ public:
         prevPreset.setTooltip (juce::String::fromUTF8 ("Föregående preset"));
         nextPreset.setTooltip (juce::String::fromUTF8 ("Nästa preset"));
         savePreset.setTooltip ("Spara ljudet som eget preset");
-        for (auto* k : { &cutoff, &resonance, &drive })
+        for (auto* k : { &drive, &katedral, &master })
             addAndMakeVisible (k);
         addAndMakeVisible (meter);
         buildBrushedMetal (1, 1);
@@ -398,7 +489,7 @@ public:
 
         if (! knobRow.isEmpty())
         {
-            const float y = (float) cutoff.getBounds().getCentreY() + 8.0f;
+            const float y = (float) drive.getBounds().getCentreY() + 8.0f;
             juce::ColourGradient pipe (colours::copper.brighter (0.4f), 0, y - 4.0f, colours::copper.darker (0.6f), 0, y + 4.0f, false);
             g.setGradientFill (pipe);
             g.fillRect (juce::Rectangle<float> ((float) knobRow.getX(), y - 4.0f, (float) knobRow.getWidth(), 8.0f));
@@ -444,7 +535,7 @@ public:
 
         knobRow = r;
         const int w = r.getWidth() / 3;
-        for (auto* k : { &cutoff, &resonance, &drive })
+        for (auto* k : { &drive, &katedral, &master })
             k->setBounds (r.removeFromLeft (w).withSizeKeepingCentre (juce::jmin (w, 130), 150));
     }
 
@@ -454,7 +545,7 @@ public:
     // Presetväljare
     juce::ComboBox presetBox;
     juce::TextButton prevPreset { "<" }, nextPreset { ">" }, savePreset { "SPARA" };
-    KrangKnob cutoff { "Cutoff" }, resonance { "Resonans" }, drive { "Krangdrive" };
+    KrangKnob drive { "Krangdrive" }, katedral { "Katedral" }, master { "Master" };
     NeedleMeter meter;
 
 private:

@@ -1,14 +1,14 @@
-// Fas 0: Krang-stilprovet ovanpå ett generiskt testgränssnitt med alla parametrar.
-// Hela panelen ersätts av Krang-panelen i fas 2 (Philip).
+// Krang-panelen (fas 2): hela gränssnittet ritas i en fast designstorlek (1200 × 850)
+// och skalas proportionellt när fönstret ändrar storlek (60–160 %).
 //
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
 #include "ui/KrangStyle.h"
-#include "ui/StegverketPanel.h"
-#include <juce_audio_utils/juce_audio_utils.h>
+#include "ui/Panels.h"
 
 class KrangBoxEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
@@ -19,40 +19,43 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    static constexpr int designWidth = 1200, designHeight = 850;
+
 private:
     void timerCallback() override;
-    void showParameter (const char* paramId);
+    void layoutContent();
+    void bindAll();
+    void bindSlider (juce::Slider&, const juce::String& paramId);
+    void bindCombo (juce::ComboBox&, const juce::String& paramId);
+    void showParameter (const juce::String& paramId);
+    void shiftOctave (int delta);
+    void fillPresetBox();
+    void showSaveDialog();
 
     KrangBoxProcessor& processor;
     krang::ui::KrangLookAndFeel lookAndFeel;
-    krang::ui::KrangTopPanel top;
-    juce::GenericAudioProcessorEditor generic;
 
-    // Stegverket visas när Hammarverket är vald kammare.
-    krang::ui::StegverketPanel steg;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> seqRunAtt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> seqTempoAtt, seqSwingAtt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> seqLengthAtt;
-    bool showSteg = false;
+    // Allt innehåll ligger i en komponent i designstorlek som skalas med en transform.
+    juce::Component content;
+    krang::ui::KrangTopPanel top;
+    krang::ui::BasmalenPanel basmalen;
+    krang::ui::HammarverketPanel hammarverket;
+    krang::ui::AngledningenPanel angledningen;
 
     // Virtuellt keyboard för att provspela utan MIDI-keyboard.
     juce::MidiKeyboardComponent keyboard;
     juce::TextButton octaveDown { "OKT -" }, octaveUp { "OKT +" };
     juce::Label keyboardHint;
-    void shiftOctave (int delta);
     int keyOctave = 3; // datortangentbordets lägsta C = keyOctave * 12 (3 -> C2)
 
-    using Attachment = juce::AudioProcessorValueTreeState::SliderAttachment;
-    std::unique_ptr<Attachment> cutoffAtt, resonanceAtt, driveAtt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> chamberAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> comboAttachments;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> seqRunAtt;
 
-    juce::String lastParam;
-
-    // Presets
-    void fillPresetBox();
-    void showSaveDialog();
+    juce::TooltipWindow tooltips { this, 600 };
     std::unique_ptr<juce::AlertWindow> saveDialog;
-    juce::String shownPreset;
+    juce::String lastParam { "distDrive" }, shownPreset;
+    int shownChamber = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KrangBoxEditor)
 };

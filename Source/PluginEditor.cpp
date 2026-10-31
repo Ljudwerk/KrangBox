@@ -3,39 +3,26 @@
 
 namespace
 {
-    constexpr int topHeight = 230;
-    constexpr int keyboardHeight = 110;
-    constexpr int stegHeight = 300;
+    // Höjder i designstorlek (bredd 1200).
+    constexpr int topHeight = 230, chamberHeight = 320, angledningHeight = 190, keyboardHeight = 110;
+    static_assert (topHeight + chamberHeight + angledningHeight + keyboardHeight == KrangBoxEditor::designHeight);
 }
 
 KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
-    : AudioProcessorEditor (p), processor (p), generic (p),
-      steg (p.pattern, p.stegverket.currentStep),
+    : AudioProcessorEditor (p), processor (p),
+      hammarverket (p.pattern, p.stegverket.currentStep),
       keyboard (p.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
-    namespace id = krang::params::id;
+    using namespace krang::ui;
+    setLookAndFeel (&lookAndFeel);
 
-    top.setLookAndFeel (&lookAndFeel);
-    addAndMakeVisible (top);
-    addAndMakeVisible (generic);
+    addAndMakeVisible (content);
+    for (auto* c : std::initializer_list<juce::Component*> { &top, &basmalen, &angledningen, &keyboard,
+                                                             &octaveDown, &octaveUp, &keyboardHint })
+        content.addAndMakeVisible (c);
+    content.addChildComponent (hammarverket);
 
-    cutoffAtt    = std::make_unique<Attachment> (p.state, id::cutoff,    top.cutoff.slider);
-    resonanceAtt = std::make_unique<Attachment> (p.state, id::resonance, top.resonance.slider);
-    driveAtt     = std::make_unique<Attachment> (p.state, id::distDrive, top.drive.slider);
-
-    // Kammarväljaren: fyll med parameterns val innan den kopplas.
-    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (p.state.getParameter (id::chamber)))
-        top.chamber.addItemList (choice->choices, 1);
-    chamberAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, id::chamber, top.chamber);
-
-    // Stegverket
-    addChildComponent (steg);
-    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (p.state.getParameter (id::seqLength)))
-        steg.length.addItemList (choice->choices, 1);
-    seqRunAtt    = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.state, id::seqRun, steg.play);
-    seqTempoAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, id::seqTempo, steg.tempo);
-    seqSwingAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, id::seqSwing, steg.swing);
-    seqLengthAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, id::seqLength, steg.length);
+    bindAll();
 
     // Presets
     fillPresetBox();
@@ -43,21 +30,15 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     {
         const int index = top.presetBox.getSelectedId() - 1;
         if (index >= 0 && processor.presets.load (index))
-            steg.repaint();
+            hammarverket.repaint();
     };
-    top.prevPreset.onClick = [this] { processor.presets.loadNext (-1); steg.repaint(); };
-    top.nextPreset.onClick = [this] { processor.presets.loadNext (+1); steg.repaint(); };
+    top.prevPreset.onClick = [this] { processor.presets.loadNext (-1); hammarverket.repaint(); };
+    top.nextPreset.onClick = [this] { processor.presets.loadNext (+1); hammarverket.repaint(); };
     top.savePreset.onClick = [this] { showSaveDialog(); };
 
-    top.cutoff.slider.onValueChange    = [this] { lastParam = id::cutoff; };
-    top.resonance.slider.onValueChange = [this] { lastParam = id::resonance; };
-    top.drive.slider.onValueChange     = [this] { lastParam = id::distDrive; };
-
     // Keyboard: C1–C7, datorns tangentbord (A W S E D ...) spelar från C2 – bra för bas.
-    using namespace krang::ui;
     keyboard.setAvailableRange (24, 96);
     keyboard.setLowestVisibleKey (24);
-    keyboard.setKeyWidth (22.0f);
     keyboard.setOctaveForMiddleC (4);
     keyboard.setVelocity (0.8f, true);
     keyboard.setColour (juce::MidiKeyboardComponent::whiteNoteColourId, colours::meterFace);
@@ -67,33 +48,139 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     keyboard.setColour (juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId, colours::brass.withAlpha (0.3f));
     keyboard.setColour (juce::MidiKeyboardComponent::shadowColourId, juce::Colours::black.withAlpha (0.4f));
     keyboard.setWantsKeyboardFocus (true);
-    addAndMakeVisible (keyboard);
-
-    for (auto* b : { &octaveDown, &octaveUp })
-    {
-        b->setColour (juce::TextButton::buttonColourId, colours::chassisHigh);
-        b->setColour (juce::TextButton::textColourOffId, colours::engraving);
-        addAndMakeVisible (b);
-    }
     octaveDown.onClick = [this] { shiftOctave (-1); };
     octaveUp.onClick   = [this] { shiftOctave (+1); };
-
     keyboardHint.setColour (juce::Label::textColourId, colours::brass);
     keyboardHint.setFont (panelFont (11.0f, false));
     keyboardHint.setJustificationType (juce::Justification::centredLeft);
-    addAndMakeVisible (keyboardHint);
     shiftOctave (0);
 
-    lastParam = id::cutoff;
+    layoutContent();
+
+    // Proportionell storleksändring, 60–160 % av designstorleken.
     setResizable (true, true);
-    setResizeLimits (820, 600, 1600, 1500);
-    setSize (900, 820);
+    setResizeLimits (designWidth * 6 / 10, designHeight * 6 / 10, designWidth * 16 / 10, designHeight * 16 / 10);
+    if (auto* c = getConstrainer())
+        c->setFixedAspectRatio ((double) designWidth / designHeight);
+    setSize (designWidth * 9 / 10, designHeight * 9 / 10);
+
     startTimerHz (30);
+    timerCallback();
 }
 
 KrangBoxEditor::~KrangBoxEditor()
 {
-    top.setLookAndFeel (nullptr);
+    setLookAndFeel (nullptr);
+}
+
+// --- Parametrar --------------------------------------------------------------
+
+void KrangBoxEditor::bindAll()
+{
+    namespace id = krang::params::id;
+
+    // Frontpanelen: kammare och de tre stora rattarna, som gäller båda kamrarna.
+    bindCombo (top.chamber, id::chamber);
+    bindSlider (top.drive.slider, id::distDrive);
+    bindSlider (top.katedral.slider, id::rvbMix);
+    bindSlider (top.master.slider, id::master);
+
+    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), angledningen.bindings() })
+    {
+        for (auto& [slider, paramId] : bindings.sliders) bindSlider (*slider, paramId);
+        for (auto& [combo, paramId] : bindings.combos)   bindCombo (*combo, paramId);
+    }
+
+    // Stegverket
+    auto& steg = hammarverket.steg;
+    bindCombo (steg.length, id::seqLength);
+    bindSlider (steg.tempo, id::seqTempo);
+    bindSlider (steg.swing, id::seqSwing);
+    seqRunAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.state, id::seqRun, steg.play);
+}
+
+void KrangBoxEditor::bindSlider (juce::Slider& slider, const juce::String& paramId)
+{
+    auto* param = processor.state.getParameter (paramId);
+    jassert (param != nullptr);
+    if (param == nullptr) return;
+
+    sliderAttachments.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.state, paramId, slider));
+
+    // Visa värdet med enhet ("400 Hz", "0.250 s"), och låt displayen följa den ratt man vrider på.
+    slider.textFromValueFunction = [param] (double v)
+    {
+        auto text = param->getText (param->convertTo0to1 ((float) v), 0);
+        const auto unit = param->getLabel();
+        return unit.isEmpty() ? text : text + " " + unit;
+    };
+    slider.updateText();
+    slider.onDragStart = [this, paramId] { lastParam = paramId; };
+}
+
+void KrangBoxEditor::bindCombo (juce::ComboBox& combo, const juce::String& paramId)
+{
+    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (processor.state.getParameter (paramId)))
+    {
+        combo.clear (juce::dontSendNotification);
+        combo.addItemList (choice->choices, 1);
+        comboAttachments.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.state, paramId, combo));
+        combo.onChange = [this, paramId] { lastParam = paramId; };
+    }
+}
+
+// --- Layout --------------------------------------------------------------------
+
+void KrangBoxEditor::paint (juce::Graphics& g)
+{
+    g.fillAll (krang::ui::colours::chassis);
+}
+
+void KrangBoxEditor::layoutContent()
+{
+    content.setBounds (0, 0, designWidth, designHeight);
+    auto r = content.getLocalBounds();
+    top.setBounds (r.removeFromTop (topHeight));
+    const auto chamberArea = r.removeFromTop (chamberHeight);
+    basmalen.setBounds (chamberArea);
+    hammarverket.setBounds (chamberArea);
+    angledningen.setBounds (r.removeFromTop (angledningHeight));
+
+    auto kb = r.reduced (12, 8);
+    auto bar = kb.removeFromTop (26);
+    octaveDown.setBounds (bar.removeFromLeft (64));
+    bar.removeFromLeft (6);
+    octaveUp.setBounds (bar.removeFromLeft (64));
+    bar.removeFromLeft (12);
+    keyboardHint.setBounds (bar);
+    kb.removeFromTop (4);
+    keyboard.setBounds (kb);
+    keyboard.setKeyWidth ((float) kb.getWidth() / 43.0f); // C1–C7 = 43 vita tangenter, fyller hela bredden
+}
+
+void KrangBoxEditor::resized()
+{
+    const float scale = (float) getWidth() / (float) designWidth;
+    content.setTransform (juce::AffineTransform::scale (scale));
+}
+
+// --- Keyboard, display och presets ------------------------------------------------
+
+void KrangBoxEditor::shiftOctave (int delta)
+{
+    keyOctave = juce::jlimit (1, 7, keyOctave + delta);
+    keyboard.setKeyPressBaseOctave (keyOctave);
+    const auto lowest = juce::MidiMessage::getMidiNoteName (keyOctave * 12, true, true, 4);
+    keyboardHint.setText (juce::String::fromUTF8 ("Spela med musen, eller klicka på keyboardet och använd datorns tangenter "
+                                                  "A W S E D F T G Y H U J K (från ") + lowest + ").",
+                          juce::dontSendNotification);
+}
+
+void KrangBoxEditor::showParameter (const juce::String& paramId)
+{
+    if (auto* param = processor.state.getParameter (paramId))
+        top.display.setLines (processor.presets.getCurrentName(),
+                              param->getName (24) + "  " + param->getCurrentValueAsText() + " " + param->getLabel());
 }
 
 void KrangBoxEditor::fillPresetBox()
@@ -143,71 +230,26 @@ void KrangBoxEditor::showSaveDialog()
     }
 }
 
-void KrangBoxEditor::paint (juce::Graphics& g)
-{
-    g.fillAll (krang::ui::colours::chassis);
-}
-
-void KrangBoxEditor::resized()
-{
-    auto r = getLocalBounds();
-    top.setBounds (r.removeFromTop (topHeight));
-    if (showSteg)
-        steg.setBounds (r.removeFromTop (stegHeight));
-
-    auto kb = r.removeFromBottom (keyboardHeight).reduced (12, 8);
-    auto bar = kb.removeFromTop (26);
-    octaveDown.setBounds (bar.removeFromLeft (64));
-    bar.removeFromLeft (6);
-    octaveUp.setBounds (bar.removeFromLeft (64));
-    bar.removeFromLeft (12);
-    keyboardHint.setBounds (bar);
-    kb.removeFromTop (4);
-    keyboard.setBounds (kb);
-
-    generic.setBounds (r);
-}
-
-void KrangBoxEditor::shiftOctave (int delta)
-{
-    keyOctave = juce::jlimit (1, 7, keyOctave + delta);
-    keyboard.setKeyPressBaseOctave (keyOctave);
-    const auto lowest = juce::MidiMessage::getMidiNoteName (keyOctave * 12, true, true, 4);
-    keyboardHint.setText (juce::String::fromUTF8 ("Spela med musen, eller klicka på keyboardet och använd datorns tangenter "
-                                                  "A W S E D F T G Y H U J K (från ") + lowest + ").",
-                          juce::dontSendNotification);
-}
-
-void KrangBoxEditor::showParameter (const char* paramId)
-{
-    auto* param = processor.state.getParameter (paramId);
-    if (param == nullptr)
-        return;
-
-    top.display.setLines (processor.presets.getCurrentName(),
-                          param->getName (24) + "  " + param->getCurrentValueAsText()
-                              + " " + param->getLabel());
-}
-
 void KrangBoxEditor::timerCallback()
 {
     top.meter.setLevel (processor.outputPeak.exchange (0.0f));
 
-    // Visa Stegverket bara när Hammarverket spelar.
-    const bool drums = processor.state.getRawParameterValue (krang::params::id::chamber)->load() > 0.5f;
-    if (drums != showSteg)
+    // Kammarmodulen följer kammarväljaren.
+    const int chamber = (int) processor.state.getRawParameterValue (krang::params::id::chamber)->load();
+    if (chamber != shownChamber)
     {
-        showSteg = drums;
-        steg.setVisible (drums);
-        resized();
+        shownChamber = chamber;
+        basmalen.setVisible (chamber == 0);
+        hammarverket.setVisible (chamber == 1);
     }
+
     // Presetbyte från DAW:en (programlistan) eller nästa/föregående: följ med i listan.
     if (processor.presets.getCurrentName() != shownPreset)
     {
         shownPreset = processor.presets.getCurrentName();
         top.presetBox.setSelectedId (processor.presets.getCurrentIndex() + 1, juce::dontSendNotification);
-        steg.repaint();
+        hammarverket.repaint();
     }
 
-    showParameter (lastParam.toRawUTF8());
+    showParameter (lastParam);
 }
