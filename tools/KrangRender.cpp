@@ -6,6 +6,8 @@
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "dsp/KrangEngine.h"
+#include "Parameters.h"
+#include "presets/PresetManager.h"
 #include <iostream>
 
 namespace
@@ -137,7 +139,31 @@ bool report (const char* name, const Stats& s, int latency, bool extraOk = true)
               << ", latens " << latency << " samples  " << (ok ? "OK" : "FEL") << "\n";
     return ok;
 }
+// Minsta möjliga AudioProcessor: bara för att äga parameterträdet, så att presets kan laddas utan DAW.
+struct ParamHost : juce::AudioProcessor
+{
+    ParamHost() : AudioProcessor (BusesProperties().withOutput ("Out", juce::AudioChannelSet::stereo())) {}
+    const juce::String getName() const override { return "KrangRender"; }
+    void prepareToPlay (double, int) override {}
+    void releaseResources() override {}
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    double getTailLengthSeconds() const override { return 0; }
+    bool acceptsMidi() const override { return true; }
+    bool producesMidi() const override { return false; }
+    juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+    bool hasEditor() const override { return false; }
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int) override {}
+    const juce::String getProgramName (int) override { return {}; }
+    void changeProgramName (int, const juce::String&) override {}
+    void getStateInformation (juce::MemoryBlock&) override {}
+    void setStateInformation (const void*, int) override {}
+
+    juce::AudioProcessorValueTreeState state { *this, nullptr, "KrangBox", krang::params::createLayout() };
+};
 } // namespace
+
 
 int main (int argc, char* argv[])
 {
@@ -297,6 +323,54 @@ int main (int argc, char* argv[])
         const auto out = renderEngine (p, midi, total + (int) sr, sr, blockSize, latency);
         failures += report ("stegverket_ror", analyse (out), latency) ? 0 : 1;
         writeWav (outDir.getChildFile ("krangbox_stegverket_ror.wav"), out, sr);
+    }
+
+    // Fabrikspresets: ladda varje preset som pluginet gör och rendera ett prov.
+    {
+        ParamHost host;
+        krang::StepPattern pattern;
+        krang::PresetManager presets (host.state, pattern);
+        krang::params::Reader reader (host.state);
+        int bassTotal = 0;
+        const auto bassMidi = buildMidi (sr, 112.0, 1, bassTotal);
+
+        for (int i = 0; i < presets.getNumFactory(); ++i)
+        {
+            presets.load (i);
+            const auto p = reader.read();
+            juce::MidiBuffer midi;
+            int total = bassTotal + (int) sr * 2;
+
+            if (p.chamber == krang::Chamber::Hammarverket)
+            {
+                // Två takter via Stegverket på egen klocka, i presetets tempo och gung.
+                krang::Stegverket seq;
+                seq.prepare (sr);
+                auto st = p.stegverket;
+                st.run = true;
+                const int seqTotal = (int) (2 * 4 * sr * 60.0 / st.tempo);
+                for (int pos = 0; pos < seqTotal; pos += blockSize)
+                {
+                    juce::MidiBuffer m;
+                    seq.process (pattern, st, {}, true, juce::jmin (blockSize, seqTotal - pos), m);
+                    midi.addEvents (m, 0, -1, pos);
+                }
+                total = seqTotal + (int) sr * 2;
+            }
+            else
+            {
+                midi = bassMidi;
+            }
+
+            const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+            const auto s = analyse (out);
+            const auto label = juce::String ("preset_") + juce::String (i + 1).paddedLeft ('0', 2) + "_"
+                             + presets.getEntries()[(size_t) i].name;
+            // Ett preset ska höras ordentligt men inte slå i taket hela tiden.
+            const bool levelOk = s.rmsDb > -16.0f && s.rmsDb < -7.0f; // presets ska ligga ungefär lika starkt
+            failures += report (label.toRawUTF8(), s, latency, levelOk) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + label.replace (" ", "_") + ".wav"), out, sr);
+        }
     }
 
     return failures == 0 ? 0 : 2;

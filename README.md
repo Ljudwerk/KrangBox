@@ -110,7 +110,7 @@ cmake --build build --config Release --target KrangRender
 ./build/KrangRender_artefacts/Release/KrangRender renders
 ```
 
-Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross), varje trumröst för sig, varje filter- och reverbläge (med hög resonans och stort rum, som stresstest) och Stegverkets startmönster till WAV. Testar också Stegverkets timing mot en simulerad DAW, den interna klockan och gung, på sample-nivå. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
+Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross), varje trumröst för sig, varje filter- och reverbläge (med hög resonans och stort rum, som stresstest) Stegverkets startmönster och alla fabrikspresets till WAV. Testar också Stegverkets timing mot en simulerad DAW, den interna klockan och gung, på sample-nivå, och att alla fabrikspresets ligger mellan −16 och −7 dBFS RMS. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
 
 ## Hammarverket
 
@@ -153,6 +153,18 @@ Signalvägen är: kammare → **Krangdistortion** → **Ångfilter** → **Kated
 
 Kam ger en metallisk ton på vald frekvens, som ljud genom ett långt rör. Formant låter ljudet "säga" vokaler. Utgången har ett tak på −0,3 dBFS.
 
+## Presets
+
+Uppe till höger på frontpanelen: `<` och `>` bläddrar, listan visar alla presets i kategorier och **SPARA** sparar nuvarande ljud som eget preset. Ett eget preset innehåller alla inställningar och Stegverkets mönster. DAW:ens programlista visar fabrikspresets.
+
+| Kategori | Presets |
+| --- | --- |
+| Bas | Init Basmålen, Ångvisslan, Smedjans bas, Rostig sub, Kopparrörsacid, Vikt vågbas, Domedagsbas, Tyst maskin |
+| Drön och folk | Nyckelharpsdrön, Kulning i ångan, Kamröret, Väderkvarnen |
+| Trummor (med mönster) | Init Hammarverket, Smedjegång, Rostig fabrik, Folkdans i ruinerna, Ångslagets puls, Bitkrossad marsch, Katedralens slagverk, Träskedsbrygga, Ventilsystemet |
+
+Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar bara det som skiljer sig från standardvärdena. Egna presets sparas som `.krang`-filer (XML) i `~/Library/Application Support/KrangBox/Presets/` och kan delas mellan datorer. Ett eget preset kan inte få samma namn som ett fabrikspreset; det får då tillägget "(eget)".
+
 ## Provspela
 
 Öppna den fristående appen (`KrangBox.app`) eller pluginet i en DAW. Längst ned finns ett virtuellt keyboard (C1–C7): spela med musen, eller klicka på det och använd datorns tangenter `A W S E D F T G Y H U J K`. `OKT -` och `OKT +` flyttar datortangenterna en oktav; de startar på C2, bra för bas. I den fristående appen väljer du ljudkort och MIDI-ingång under *Options*.
@@ -170,6 +182,7 @@ Kam ger en metallisk ton på vald frekvens, som ljud genom ett långt rör. Form
 | `Source/Parameters.h` | Parameterträdet – ID:n får aldrig döpas om | Justine |
 | `Source/ui/KrangStyle.h` | Krang-stilprov: LookAndFeel, ratt, VFD-display, VU-mätare | Philip |
 | `Source/ui/StegverketPanel.h` | Stegverkets lamprutnät och transport | Philip |
+| `Source/presets/` | Fabrikspresets och PresetManager (spara, ladda, DAW-program) | Doktor Krang |
 | `Source/PluginEditor.*` | Stilprov + testgränssnitt + virtuellt keyboard, ersätts av Krang-panelen i fas 2 | Philip |
 | `tools/KrangRender.cpp` | Offline-rendering för lyssningstest och CI | Doktor Krang |
 | `tools/KrangSnapshot.cpp` | Ritar stilprovet till PNG för granskning utan DAW | Philip |

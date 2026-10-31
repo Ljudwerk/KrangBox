@@ -37,6 +37,18 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     seqSwingAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, id::seqSwing, steg.swing);
     seqLengthAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, id::seqLength, steg.length);
 
+    // Presets
+    fillPresetBox();
+    top.presetBox.onChange = [this]
+    {
+        const int index = top.presetBox.getSelectedId() - 1;
+        if (index >= 0 && processor.presets.load (index))
+            steg.repaint();
+    };
+    top.prevPreset.onClick = [this] { processor.presets.loadNext (-1); steg.repaint(); };
+    top.nextPreset.onClick = [this] { processor.presets.loadNext (+1); steg.repaint(); };
+    top.savePreset.onClick = [this] { showSaveDialog(); };
+
     top.cutoff.slider.onValueChange    = [this] { lastParam = id::cutoff; };
     top.resonance.slider.onValueChange = [this] { lastParam = id::resonance; };
     top.drive.slider.onValueChange     = [this] { lastParam = id::distDrive; };
@@ -84,6 +96,53 @@ KrangBoxEditor::~KrangBoxEditor()
     top.setLookAndFeel (nullptr);
 }
 
+void KrangBoxEditor::fillPresetBox()
+{
+    auto& box = top.presetBox;
+    box.clear (juce::dontSendNotification);
+    juce::String category;
+    const auto& entries = processor.presets.getEntries();
+    for (int i = 0; i < (int) entries.size(); ++i)
+    {
+        if (entries[(size_t) i].category != category)
+        {
+            category = entries[(size_t) i].category;
+            box.addSectionHeading (category);
+        }
+        box.addItem (entries[(size_t) i].name, i + 1);
+    }
+    box.setSelectedId (processor.presets.getCurrentIndex() + 1, juce::dontSendNotification);
+    shownPreset = processor.presets.getCurrentName();
+}
+
+void KrangBoxEditor::showSaveDialog()
+{
+    saveDialog = std::make_unique<juce::AlertWindow> ("Spara preset", juce::String::fromUTF8 ("Namn på ljudet:"),
+                                                      juce::MessageBoxIconType::NoIcon, this);
+    saveDialog->addTextEditor ("name", processor.presets.getCurrentName());
+    saveDialog->addButton ("SPARA", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    saveDialog->addButton ("AVBRYT", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    saveDialog->enterModalState (true, juce::ModalCallbackFunction::create ([this] (int result)
+    {
+        if (result == 1 && saveDialog != nullptr)
+        {
+            const auto name = saveDialog->getTextEditorContents ("name");
+            if (processor.presets.saveUser (name))
+                fillPresetBox();
+            else
+                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Spara preset",
+                                                        juce::String::fromUTF8 ("Kunde inte spara presetet. Kontrollera namnet."));
+        }
+        saveDialog.reset();
+    }), false);
+
+    if (auto* editor = saveDialog->getTextEditor ("name"))
+    {
+        editor->grabKeyboardFocus();
+        editor->selectAll();
+    }
+}
+
 void KrangBoxEditor::paint (juce::Graphics& g)
 {
     g.fillAll (krang::ui::colours::chassis);
@@ -122,12 +181,10 @@ void KrangBoxEditor::shiftOctave (int delta)
 void KrangBoxEditor::showParameter (const char* paramId)
 {
     auto* param = processor.state.getParameter (paramId);
-    auto* mode    = processor.state.getParameter (krang::params::id::distMode);
-    auto* chamber = processor.state.getParameter (krang::params::id::chamber);
-    if (param == nullptr || mode == nullptr || chamber == nullptr)
+    if (param == nullptr)
         return;
 
-    top.display.setLines (chamber->getCurrentValueAsText() + "  " + mode->getCurrentValueAsText(),
+    top.display.setLines (processor.presets.getCurrentName(),
                           param->getName (24) + "  " + param->getCurrentValueAsText()
                               + " " + param->getLabel());
 }
@@ -144,5 +201,13 @@ void KrangBoxEditor::timerCallback()
         steg.setVisible (drums);
         resized();
     }
+    // Presetbyte från DAW:en (programlistan) eller nästa/föregående: följ med i listan.
+    if (processor.presets.getCurrentName() != shownPreset)
+    {
+        shownPreset = processor.presets.getCurrentName();
+        top.presetBox.setSelectedId (processor.presets.getCurrentIndex() + 1, juce::dontSendNotification);
+        steg.repaint();
+    }
+
     showParameter (lastParam.toRawUTF8());
 }

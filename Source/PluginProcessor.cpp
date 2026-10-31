@@ -7,6 +7,7 @@ KrangBoxProcessor::KrangBoxProcessor()
       state (*this, nullptr, "KrangBox", krang::params::createLayout())
 {
     pattern.loadDefault();
+    state.state.setProperty ("presetName", juce::String::fromUTF8 ("Init Basmålen"), nullptr);
 }
 
 void KrangBoxProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)

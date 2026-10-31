@@ -79,7 +79,11 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         p.push_back (std::make_unique<P> (ParameterID { pid, 1 }, String::fromUTF8 (name), r, def,
                                           AudioParameterFloatAttributes()
                                               .withLabel (unit)
-                                              .withStringFromValueFunction ([decimals] (float v, int) { return String (v, decimals); })));
+                                              .withStringFromValueFunction ([decimals] (float v, int)
+                                              {
+                                                  // OBS: String (v, 0) skriver ut alla decimaler, därför heltal separat.
+                                                  return decimals == 0 ? String (roundToInt (v)) : String (v, decimals);
+                                              })));
     };
     auto time = [] (float maxSec) { NormalisableRange<float> r (0.001f, maxSec); r.setSkewForCentre (maxSec * 0.1f); return r; };
 

@@ -363,6 +363,25 @@ public:
         chamber.setColour (juce::ComboBox::arrowColourId, colours::brass);
         chamber.setTooltip ("Kammare: vilken ljudmotor som spelar");
         addAndMakeVisible (chamber);
+
+        for (auto* c : { &presetBox })
+        {
+            c->setColour (juce::ComboBox::backgroundColourId, colours::bakelite);
+            c->setColour (juce::ComboBox::textColourId, colours::vfdText);
+            c->setColour (juce::ComboBox::outlineColourId, colours::brass);
+            c->setColour (juce::ComboBox::arrowColourId, colours::brass);
+            addAndMakeVisible (c);
+        }
+        presetBox.setTextWhenNothingSelected ("(eget ljud)");
+        for (auto* b : { &prevPreset, &nextPreset, &savePreset })
+        {
+            b->setColour (juce::TextButton::buttonColourId, colours::chassisHigh);
+            b->setColour (juce::TextButton::textColourOffId, colours::engraving);
+            addAndMakeVisible (b);
+        }
+        prevPreset.setTooltip (juce::String::fromUTF8 ("Föregående preset"));
+        nextPreset.setTooltip (juce::String::fromUTF8 ("Nästa preset"));
+        savePreset.setTooltip ("Spara ljudet som eget preset");
         for (auto* k : { &cutoff, &resonance, &drive })
             addAndMakeVisible (k);
         addAndMakeVisible (meter);
@@ -391,8 +410,8 @@ public:
         g.setFont (panelFont (17.0f));
         g.drawText ("DR. KRANGS PATENTERADE LJUDMASKIN", plate.withWidth ((float) getWidth() - 40.0f), juce::Justification::centredLeft);
         g.setColour (colours::brass);
-        g.setFont (panelFont (11.0f, false));
-        g.drawText (juce::String::fromUTF8 ("MODELL KB-0  ·  PROTOTYP"), plate.withX ((float) getWidth() - 320.0f).withWidth (300.0f), juce::Justification::centredRight);
+        g.setFont (panelFont (10.0f, false));
+        g.drawText ("PRESET", prevPreset.getBounds().translated (-60, 0).withWidth (54), juce::Justification::centredRight);
 
         for (auto p : { juce::Point<float> (10.0f, 10.0f), { (float) getWidth() - 10.0f, 10.0f },
                         { 10.0f, (float) getHeight() - 16.0f }, { (float) getWidth() - 10.0f, (float) getHeight() - 16.0f } })
@@ -402,6 +421,17 @@ public:
     void resized() override
     {
         buildBrushedMetal (getWidth(), getHeight());
+        // Presetrad uppe till höger: PRESET < [lista] > SPARA
+        auto bar = juce::Rectangle<int> (getWidth() - 20 - 400, 14, 400, 24);
+        bar.removeFromLeft (58); // plats för etiketten PRESET
+        prevPreset.setBounds (bar.removeFromLeft (24));
+        bar.removeFromLeft (3);
+        savePreset.setBounds (bar.removeFromRight (64));
+        bar.removeFromRight (6);
+        nextPreset.setBounds (bar.removeFromRight (24));
+        bar.removeFromRight (3);
+        presetBox.setBounds (bar);
+
         auto r = getLocalBounds().reduced (20).withTrimmedTop (30).withTrimmedBottom (2);
 
         auto left = r.removeFromLeft (250).withSizeKeepingCentre (250, 132);
@@ -420,6 +450,10 @@ public:
 
     VfdDisplay display;
     juce::ComboBox chamber; // kammarväljare: Basmålen, Hammarverket, ...
+
+    // Presetväljare
+    juce::ComboBox presetBox;
+    juce::TextButton prevPreset { "<" }, nextPreset { ">" }, savePreset { "SPARA" };
     KrangKnob cutoff { "Cutoff" }, resonance { "Resonans" }, drive { "Krangdrive" };
     NeedleMeter meter;
 

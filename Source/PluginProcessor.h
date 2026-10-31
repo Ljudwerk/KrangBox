@@ -4,6 +4,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "Parameters.h"
+#include "presets/PresetManager.h"
 #include <atomic>
 
 class KrangBoxProcessor final : public juce::AudioProcessor
@@ -26,10 +27,15 @@ public:
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.5; }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return "Init"; }
+    // DAW:ens programlista = fabrikspresets. Egna presets nås från gränssnittet.
+    int getNumPrograms() override { return presets.getNumFactory(); }
+    int getCurrentProgram() override { return juce::jlimit (0, presets.getNumFactory() - 1, presets.getCurrentIndex()); }
+    void setCurrentProgram (int index) override { presets.load (index); }
+    const juce::String getProgramName (int index) override
+    {
+        const auto& e = presets.getEntries();
+        return juce::isPositiveAndBelow (index, (int) e.size()) ? e[(size_t) index].name : juce::String();
+    }
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock& destData) override;
@@ -46,6 +52,9 @@ public:
     // Stegverkets mönster (gränssnittet skriver, ljudtråden läser) och sekvensern själv.
     krang::StepPattern pattern;
     krang::Stegverket stegverket;
+
+    // Fabrikspresets och egna presets.
+    krang::PresetManager presets { state, pattern };
 
 private:
     krang::params::Reader reader { state };

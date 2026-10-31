@@ -48,5 +48,11 @@ private:
 
     juce::String lastParam;
 
+    // Presets
+    void fillPresetBox();
+    void showSaveDialog();
+    std::unique_ptr<juce::AlertWindow> saveDialog;
+    juce::String shownPreset;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KrangBoxEditor)
 };

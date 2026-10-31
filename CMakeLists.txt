@@ -84,7 +84,7 @@ if(KRANG_BUILD_TOOLS)
     target_include_directories(KrangRender PRIVATE Source)
     target_compile_definitions(KrangRender PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(KrangRender
-        PRIVATE juce::juce_audio_formats juce::juce_dsp
+        PRIVATE juce::juce_audio_formats juce::juce_dsp juce::juce_audio_processors
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
     # Ritar stilprovet till PNG, så att grafiken kan granskas utan DAW.
