@@ -10,6 +10,7 @@ KrangBoxProcessor::KrangBoxProcessor()
 
 void KrangBoxProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    keyboardState.reset();
     engine.prepare (sampleRate, samplesPerBlock);
     engine.setParams (reader.read());
     engine.reset();
@@ -27,6 +28,9 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
     engine.setParams (reader.read());
+
+    // Lägg till noter från det virtuella keyboardet (och datorns tangentbord).
+    keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
 
     float* mono = buffer.getWritePointer (0);
     const int total = buffer.getNumSamples();
@@ -48,6 +52,10 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     for (int ch = 1; ch < buffer.getNumChannels(); ++ch)
         buffer.copyFrom (ch, 0, buffer, 0, 0, total);
+
+    const float peak = buffer.getMagnitude (0, 0, total);
+    float prev = outputPeak.load();
+    while (peak > prev && ! outputPeak.compare_exchange_weak (prev, peak)) {}
 }
 
 juce::AudioProcessorEditor* KrangBoxProcessor::createEditor()

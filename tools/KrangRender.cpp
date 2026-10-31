@@ -69,13 +69,13 @@ int main (int argc, char* argv[])
 
     const char* names[] = { "ror", "fuzz", "vikning", "bitkross" };
     int failures = 0;
+    float referenceRmsDb = 0.0f;
 
     for (int mode = 0; mode < 4; ++mode)
     {
         krang::EngineParams p;
         p.distortion.mode = (krang::DistMode) mode;
-        if (p.distortion.mode == krang::DistMode::Vikning) p.distortion.driveDb = 12.0f;
-        if (p.distortion.mode == krang::DistMode::Bitkross) p.distortion.driveDb = 6.0f;
+        // Standardinställningar som i pluginet: byter man läge ska nivån hållas.
 
         krang::KrangEngine engine;
         engine.prepare (sr, blockSize);
@@ -113,7 +113,10 @@ int main (int argc, char* argv[])
         const float peak = out.getMagnitude (0, 0, total);
         const float rms  = out.getRMSLevel (0, 0, total);
         const double dc  = sum / total;
-        const bool ok = finite && peak > 0.05f && peak <= 1.0f && std::abs (dc) < 0.05;
+        const float rmsDb = juce::Decibels::gainToDecibels (rms);
+        if (mode == 0) referenceRmsDb = rmsDb;
+        const bool levelOk = std::abs (rmsDb - referenceRmsDb) <= 1.5f; // inga volymhopp mellan lägen
+        const bool ok = finite && peak > 0.05f && peak <= 1.0f && std::abs (dc) < 0.05 && levelOk;
         failures += ok ? 0 : 1;
 
         std::cout << names[mode] << ": topp " << juce::Decibels::gainToDecibels (peak) << " dBFS, RMS "

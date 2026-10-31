@@ -47,7 +47,18 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     auto add = [&] (const char* pid, const char* name, NormalisableRange<float> r, float def, const char* label = "")
     {
-        p.push_back (std::make_unique<P> (ParameterID { pid, 1 }, name, r, def, AudioParameterFloatAttributes().withLabel (label)));
+        // Antal decimaler efter enhet, så att DAW och gränssnitt visar "400 Hz" och inte "400.0000305".
+        const String unit = String::fromUTF8 (label);
+        const int decimals = unit == "s" ? 3
+                           : (unit == "dB" || unit == "okt") ? 1
+                           : (unit.isEmpty() && r.interval < 1.0f) ? 2
+                           : 0;
+
+        // Namnen innehåller å, ä, ö: tolka dem uttryckligen som UTF-8.
+        p.push_back (std::make_unique<P> (ParameterID { pid, 1 }, String::fromUTF8 (name), r, def,
+                                          AudioParameterFloatAttributes()
+                                              .withLabel (unit)
+                                              .withStringFromValueFunction ([decimals] (float v, int) { return String (v, decimals); })));
     };
     auto time = [] (float maxSec) { NormalisableRange<float> r (0.001f, maxSec); r.setSkewForCentre (maxSec * 0.1f); return r; };
 
@@ -78,8 +89,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     add (id::fltR, "Filt Release", time (5.0f), 0.20f,  "s");
 
     // Krangdistortion
-    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::distMode, 1 }, "Distortion-läge",
-                                                         StringArray { "Rör", "Fuzz", "Vikning", "Bitkross" }, 0));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::distMode, 1 }, String::fromUTF8 ("Distortion-läge"),
+                                                         StringArray { String::fromUTF8 ("Rör"), "Fuzz", "Vikning", "Bitkross" }, 0));
     add (id::distDrive, "Drive",      { 0.0f, 48.0f }, 18.0f, "dB");
     add (id::distMix,   "Dist Mix",   { 0.0f, 1.0f }, 1.0f);
     add (id::distBits,  "Bitar",      { 1.0f, 16.0f, 1.0f }, 6.0f);

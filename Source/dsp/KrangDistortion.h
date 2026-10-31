@@ -7,6 +7,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include <array>
 #include <cmath>
 
 namespace krang
@@ -126,27 +127,34 @@ public:
             oversampler.processSamplesDown (block);
         }
 
-        // Blanda och sätt utnivå.
+        // Blanda och sätt utnivå. Våt signal nivåkompenseras per läge så att
+        // det inte hoppar i volym när man byter läge (uppmätt med KrangRender).
+        const float makeup = modeMakeup[(size_t) params.mode];
         const float out = juce::Decibels::decibelsToGain (params.outputDb);
         for (int i = 0; i < numSamples; ++i)
         {
             const float m = mixSmooth.getNextValue();
-            data[i] = (d[i] * (1.0f - m) + data[i] * m) * out;
+            data[i] = (d[i] * (1.0f - m) + data[i] * makeup * m) * out;
         }
     }
 
 private:
+    // Rör, Fuzz, Vikning, Bitkross – relativt Rör vid standarddrive 18 dB.
+    static constexpr std::array<float, 4> modeMakeup { 1.0f, 0.91f, 1.0f, 1.0f };
+
     void processBitcrush (float* data, int numSamples, float drive)
     {
         const int hold = juce::jmax (1, (int) params.downsample);
         const float levels = std::pow (2.0f, juce::jlimit (1.0f, 16.0f, params.bits) - 1.0f);
-        const float pre = std::sqrt (drive); // mildare drive: bitkrossen ska knastra, inte bara klippa
+        const float pre = std::sqrt (drive) * 2.0f; // mildare än de andra lägena: bitkrossen ska knastra, inte bara klippa
 
         for (int i = 0; i < numSamples; ++i)
         {
             if (holdCounter++ % hold == 0)
             {
-                const float x = juce::jlimit (-1.0f, 1.0f, data[i] * pre);
+                // Mjuk mättning före kvantiseringen: jämnar ut topparna så att
+                // bitkrossen ligger i nivå med de andra lägena utan att slå i limitern.
+                const float x = std::tanh (data[i] * pre);
                 holdValue = std::round (x * levels) / levels;
             }
             data[i] = holdValue;

@@ -53,6 +53,9 @@ clap_juce_extensions_plugin(TARGET KrangBox
     CLAP_ID "org.krangbox.krangbox"
     CLAP_FEATURES instrument synthesizer distortion)
 
+# clap-juce-extensions lägger inte CLAP-målet i KrangBox_All; gör det här.
+add_dependencies(KrangBox_All KrangBox_CLAP)
+
 target_sources(KrangBox PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp)
@@ -82,5 +85,14 @@ if(KRANG_BUILD_TOOLS)
     target_compile_definitions(KrangRender PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(KrangRender
         PRIVATE juce::juce_audio_formats juce::juce_dsp
+        PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+    # Ritar stilprovet till PNG, så att grafiken kan granskas utan DAW.
+    juce_add_console_app(KrangSnapshot PRODUCT_NAME "KrangSnapshot")
+    target_sources(KrangSnapshot PRIVATE tools/KrangSnapshot.cpp)
+    target_include_directories(KrangSnapshot PRIVATE Source)
+    target_compile_definitions(KrangSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(KrangSnapshot
+        PRIVATE juce::juce_gui_basics
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 endif()

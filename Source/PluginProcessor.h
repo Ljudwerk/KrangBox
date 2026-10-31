@@ -2,7 +2,9 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_utils/juce_audio_utils.h>
 #include "Parameters.h"
+#include <atomic>
 
 class KrangBoxProcessor final : public juce::AudioProcessor
 {
@@ -34,6 +36,12 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState state;
+
+    // Senaste toppnivå på utgången, läses (och nollställs) av mätaren i gränssnittet.
+    std::atomic<float> outputPeak { 0.0f };
+
+    // Det virtuella keyboardet i gränssnittet skriver hit; noterna blandas in i MIDI-flödet.
+    juce::MidiKeyboardState keyboardState;
 
 private:
     krang::params::Reader reader { state };
