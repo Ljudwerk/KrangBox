@@ -1,0 +1,52 @@
+name: Bygg macOS
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache för beroenden
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: deps-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Konfigurera
+        run: cmake -B build -G Xcode
+
+      - name: Bygg (universal, Release)
+        run: cmake --build build --config Release --target KrangBox_All KrangRender -- -quiet
+
+      - name: Renderingstest (NaN, topp, DC)
+        run: ./build/KrangRender_artefacts/Release/KrangRender renders
+
+      - name: Hämta pluginval
+        run: |
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          unzip -q pluginval.zip
+
+      - name: Validera VST3 och AU
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R build/KrangBox_artefacts/Release/AU/KrangBox.component ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar || true
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests --validate-in-process \
+            --validate build/KrangBox_artefacts/Release/VST3/KrangBox.vst3
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests --validate-in-process \
+            --validate ~/Library/Audio/Plug-Ins/Components/KrangBox.component
+
+      - name: Spara byggen och renderingar
+        uses: actions/upload-artifact@v4
+        with:
+          name: KrangBox-macOS
+          path: |
+            build/KrangBox_artefacts/Release/VST3
+            build/KrangBox_artefacts/Release/AU
+            build/KrangBox_artefacts/Release/CLAP
+            build/KrangBox_artefacts/Release/Standalone
+            renders
