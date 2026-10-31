@@ -6,6 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "ui/KrangStyle.h"
 #include "ui/StegverketPanel.h"
+#include "ui/Panels.h"
 #include <iostream>
 
 int main (int argc, char* argv[])
@@ -65,6 +66,26 @@ int main (int argc, char* argv[])
         juce::FileOutputStream s2 (f2);
         if (! s2.openedOk() || ! png.writeImageToStream (img, s2)) return 2;
         std::cout << "Skrev " << f2.getFullPathName() << "\n";
+    }
+    // Rittid: hur lång tid en hel omritning av panelerna tar (mjukvarurendering, designstorlek).
+    if (argc > 4 && juce::String (argv[4]) == "--tid")
+    {
+        krang::ui::BasmalenPanel bas;   bas.setLookAndFeel (&lf); bas.setSize (1200, 320);
+        krang::ui::AngledningenPanel ang; ang.setLookAndFeel (&lf); ang.setSize (1200, 190);
+        panel.setLookAndFeel (&lf); panel.setSize (1200, 230);
+        juce::Image canvas (juce::Image::ARGB, 1200, 850, true);
+        { juce::Graphics g (canvas); panel.paintEntireComponent (g, true); bas.paintEntireComponent (g, true); } // värm upp texturerna
+        constexpr int runs = 30;
+        const auto start = juce::Time::getMillisecondCounterHiRes();
+        for (int i = 0; i < runs; ++i)
+        {
+            juce::Graphics g (canvas);
+            panel.paintEntireComponent (g, true);
+            g.setOrigin (0, 230); bas.paintEntireComponent (g, true);
+            g.setOrigin (0, 320); ang.paintEntireComponent (g, true);
+        }
+        std::cout << "Hel omritning: " << (juce::Time::getMillisecondCounterHiRes() - start) / runs << " ms\n";
+        bas.setLookAndFeel (nullptr); ang.setLookAndFeel (nullptr); panel.setLookAndFeel (nullptr);
     }
     return 0;
 }

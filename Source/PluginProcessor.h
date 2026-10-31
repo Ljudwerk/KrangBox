@@ -52,6 +52,7 @@ public:
     // Stegverkets mönster (gränssnittet skriver, ljudtråden läser) och sekvensern själv.
     krang::StepPattern pattern;
     krang::Stegverket stegverket;
+    krang::Slingan slingan;
 
     // Fabrikspresets och egna presets.
     krang::PresetManager presets { state, pattern };

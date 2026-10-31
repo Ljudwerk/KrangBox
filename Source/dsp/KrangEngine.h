@@ -7,6 +7,9 @@
 
 #include "Basmalen.h"
 #include "Hammarverket.h"
+#include "Bordunorgeln.h"
+#include "Spolslingan.h"
+#include "Slingan.h"
 #include "KrangDistortion.h"
 #include "Stegverket.h"
 #include "Angledningen.h"
@@ -15,19 +18,59 @@ namespace krang
 {
 
 // Vilken kammare (ljudmotor) som spelar. Fler tillkommer i fas 3.
-enum class Chamber { Basmalen = 0, Hammarverket };
+enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan };
 
 struct EngineParams
 {
     Chamber chamber = Chamber::Basmalen;
     BasmalenParams basmalen;
     HammarverketParams hammarverket;
+    BordunorgelnParams bordunorgeln;
+    SpolslinganParams spolslingan;
+    SlinganSettings slingan;
     StegverketSettings stegverket;
     DistortionParams distortion;
     FxFilterParams filter;
     ReverbParams reverb;
     float masterDb = 0.0f;
+    float krangspaken = 0.0f; // 0..1, redan inräknad i fälten ovan av applyKrangspaken()
 };
+
+// Krangspaken: en makrospak som drar hela maskinen mot sönderfall på en gång.
+// Ändrar de vanliga parametrarna i stället för att ha egen DSP, så att allt den gör syns
+// och hörs som vanliga inställningar. Nivån kompenseras så att spaken inte bara blir en volymratt.
+inline void applyKrangspaken (EngineParams& e, float k)
+{
+    k = juce::jlimit (0.0f, 1.0f, k);
+    e.krangspaken = k;
+    if (k <= 0.0f) return;
+
+    auto toward = [k] (float value, float target, float amount = 1.0f) { return value + (target - value) * k * amount; };
+
+    auto& d = e.distortion;
+    d.driveDb  = juce::jmin (60.0f, d.driveDb + 24.0f * k);
+    d.mix      = toward (d.mix, 1.0f);
+    d.bits     = toward (d.bits, 3.0f, 0.7f);
+    d.downsample = toward (d.downsample, 12.0f, 0.7f);
+    d.outputDb -= 6.0f * k;
+
+    auto& b = e.basmalen;
+    b.drift     = b.drift + 2.0f * k;               // upp till ±75 cent: maskinen tappar stämningen
+    b.resonance = toward (b.resonance, 0.9f, 0.6f);
+    b.filterDrive = toward (b.filterDrive, 4.0f);
+
+    e.hammarverket.rost = toward (e.hammarverket.rost, 1.0f);
+
+    e.bordunorgeln.drift = e.bordunorgeln.drift + 2.0f * k;
+    e.bordunorgeln.bow   = toward (e.bordunorgeln.bow, 1.0f, 0.6f);
+
+    e.spolslingan.index  = toward (e.spolslingan.index, 10.0f, 0.6f);
+    e.spolslingan.grain  = toward (e.spolslingan.grain, 0.6f, 0.8f);
+    e.spolslingan.spread = toward (e.spolslingan.spread, 1.0f);
+
+    e.reverb.mix  = juce::jmax (e.reverb.mix, toward (e.reverb.mix, 0.45f, 0.6f));
+    e.reverb.dark = toward (e.reverb.dark, 0.8f, 0.5f);
+}
 
 class KrangEngine
 {
@@ -36,6 +79,8 @@ public:
     {
         basmalen.prepare (sampleRate, maxBlockSize);
         hammarverket.prepare (sampleRate, maxBlockSize);
+        bordunorgeln.prepare (sampleRate, maxBlockSize);
+        spolslingan.prepare (sampleRate, maxBlockSize);
         distortion.prepare (sampleRate, maxBlockSize);
         filter.prepare (sampleRate, maxBlockSize);
         reverb.prepare (sampleRate, maxBlockSize);
@@ -50,6 +95,8 @@ public:
     {
         basmalen.reset();
         hammarverket.reset();
+        bordunorgeln.reset();
+        spolslingan.reset();
         distortion.reset();
         filter.reset();
         reverb.reset();
@@ -64,10 +111,14 @@ public:
             // Byte av kammare: tysta den gamla så att inga toner hänger kvar.
             basmalen.allNotesOff();
             hammarverket.allNotesOff();
+            bordunorgeln.allNotesOff();
+            spolslingan.allNotesOff();
             chamber = p.chamber;
         }
         basmalen.setParams (p.basmalen);
         hammarverket.setParams (p.hammarverket);
+        bordunorgeln.setParams (p.bordunorgeln);
+        spolslingan.setParams (p.spolslingan);
         distortion.setParams (p.distortion);
         filter.setParams (p.filter);
         reverb.setParams (p.reverb);
@@ -76,21 +127,32 @@ public:
 
     void handleMidi (const juce::MidiMessage& m)
     {
-        const bool drums = chamber == Chamber::Hammarverket;
         if (m.isNoteOn())
         {
-            if (drums) hammarverket.noteOn (m.getNoteNumber(), m.getFloatVelocity());
-            else       basmalen.noteOn (m.getNoteNumber(), m.getFloatVelocity());
+            switch (chamber)
+            {
+                case Chamber::Hammarverket: hammarverket.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Bordunorgeln: bordunorgeln.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Spolslingan:  spolslingan.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Basmalen:     basmalen.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+            }
         }
         else if (m.isNoteOff())
         {
-            if (drums) hammarverket.noteOff (m.getNoteNumber());
-            else       basmalen.noteOff (m.getNoteNumber());
+            switch (chamber)
+            {
+                case Chamber::Hammarverket: hammarverket.noteOff (m.getNoteNumber()); break;
+                case Chamber::Bordunorgeln: bordunorgeln.noteOff (m.getNoteNumber()); break;
+                case Chamber::Spolslingan:  spolslingan.noteOff (m.getNoteNumber()); break;
+                case Chamber::Basmalen:     basmalen.noteOff (m.getNoteNumber()); break;
+            }
         }
         else if (m.isAllNotesOff() || m.isAllSoundOff())
         {
             basmalen.allNotesOff();
             hammarverket.allNotesOff();
+            bordunorgeln.allNotesOff();
+            spolslingan.allNotesOff();
         }
         else if (m.isPitchWheel())
         {
@@ -101,8 +163,13 @@ public:
     // Renderar stereo: kammaren och distortion/filter i mono i left, reverben sprider till left/right.
     void render (float* left, float* right, int numSamples)
     {
-        if (chamber == Chamber::Hammarverket) hammarverket.render (left, numSamples);
-        else                                  basmalen.render (left, numSamples);
+        switch (chamber)
+        {
+            case Chamber::Hammarverket: hammarverket.render (left, numSamples); break;
+            case Chamber::Bordunorgeln: bordunorgeln.render (left, numSamples); break;
+            case Chamber::Spolslingan:  spolslingan.render (left, numSamples); break;
+            case Chamber::Basmalen:     basmalen.render (left, numSamples); break;
+        }
         distortion.process (left, numSamples);
         filter.process (left, numSamples);
 
@@ -132,6 +199,8 @@ private:
     Chamber chamber = Chamber::Basmalen;
     Basmalen basmalen;
     Hammarverket hammarverket;
+    Bordunorgeln bordunorgeln;
+    Spolslingan spolslingan;
     KrangDistortion distortion;
     AngFilter filter;
     Katedralreverb reverb;

@@ -173,7 +173,12 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        g.fillAll (colours::chassis);
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
         auto r = getLocalBounds().toFloat();
         drawBrassBezel (g, r.removeFromBottom (4.0f).expanded (2.0f, 0.0f), 0.0f, 2.0f);
 
@@ -196,6 +201,7 @@ public:
 
     void resized() override
     {
+        background.invalidate();
         auto r = getLocalBounds().reduced (20, 0);
         auto top = r.removeFromTop (60).withTrimmedTop (24).withTrimmedBottom (6);
         top.removeFromLeft (120);
@@ -259,6 +265,7 @@ private:
     std::array<juce::TextButton, 4> pages;
     juce::TextButton clear { "RENSA" }, standard { "STANDARD" };
     int lastStep = -2, shownPages = -1;
+    textures::BackgroundCache background;
 };
 
 } // namespace krang::ui

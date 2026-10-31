@@ -74,13 +74,19 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        g.fillAll (colours::chassis);
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
         for (auto& [r, title] : frames)
             drawModuleFrame (g, r.toFloat(), title);
     }
 
     void resized() override
     {
+        background.invalidate();
         frames.clear();
         auto r = getLocalBounds().reduced (12, 10);
         auto right = r.removeFromRight (400);
@@ -120,6 +126,7 @@ public:
     }
 
 private:
+    textures::BackgroundCache background;
     static juce::Rectangle<int> inner (juce::Rectangle<int> frame) { return frame.withTrimmedTop (28).reduced (6, 4); }
     void addFrame (juce::Rectangle<int> r, const juce::String& title) { frames.push_back ({ r, title }); }
 
@@ -136,6 +143,183 @@ private:
     KrangFader ampA { "A" }, ampD { "D" }, ampS { "S" }, ampR { "R" },
                fltA { "A" }, fltD { "D" }, fltS { "S" }, fltR { "R" };
     std::vector<std::pair<juce::Rectangle<int>, juce::String>> frames;
+};
+
+// --- Bordunorgeln ---------------------------------------------------------------
+
+class BordunorgelnPanel : public juce::Component
+{
+public:
+    BordunorgelnPanel()
+    {
+        for (auto* c : std::initializer_list<juce::Component*> { &timbre, &bow, &drift, &drone, &droneNote, &symp, &attack, &release })
+            addAndMakeVisible (c);
+        droneNote.onChange = [this] { repaint (stringsArea); };
+        symp.slider.onValueChange = [this] { repaint (stringsArea); };
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+        paintStrings (g);
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
+        for (auto& [r, title] : frames)
+            drawModuleFrame (g, r.toFloat(), title);
+        g.setColour (colours::brass);
+        g.setFont (panelFont (10.0f, false));
+        g.drawText ("BORDUNTON", droneNote.getBounds().translated (0, -14).withHeight (12), juce::Justification::centredLeft);
+    }
+
+    void resized() override
+    {
+        background.invalidate();
+        frames.clear();
+        auto r = getLocalBounds().reduced (12, 10);
+        auto klang = r.removeFromLeft (360);   r.removeFromLeft (12);
+        auto bordun = r.removeFromLeft (250);  r.removeFromLeft (12);
+        auto env = r.removeFromRight (200);    r.removeFromRight (12);
+        auto res = r;
+        frames = { { klang, juce::String::fromUTF8 ("Klang") }, { bordun, "Bordun" },
+                   { res, juce::String::fromUTF8 ("Resonanssträngar") }, { env, "Envelope" } };
+
+        auto knobRow = [] (juce::Rectangle<int> f) { return f.withTrimmedTop (28).reduced (6, 4).withSizeKeepingCentre (f.getWidth() - 12, 140); };
+        layoutRow (knobRow (klang), { &timbre, &bow, &drift }, 100);
+
+        auto b = knobRow (bordun);
+        drone.setBounds (b.removeFromLeft (110));
+        droneNote.setBounds (b.withSizeKeepingCentre (90, 26));
+
+        auto rr = res.withTrimmedTop (28).reduced (12, 8);
+        symp.setBounds (rr.removeFromLeft (110).withSizeKeepingCentre (110, 140));
+        stringsArea = rr.reduced (10, 20);
+
+        layoutRow (env.withTrimmedTop (28).reduced (6, 8), { &attack, &release }, 70);
+    }
+
+    Bindings bindings()
+    {
+        return { { { &timbre.slider, "boTimbre" }, { &bow.slider, "boBow" }, { &drift.slider, "boDrift" },
+                   { &drone.slider, "boDrone" }, { &symp.slider, "boSymp" },
+                   { &attack.slider, "boAttack" }, { &release.slider, "boRelease" } },
+                 { { &droneNote, "boDroneNote" } } };
+    }
+
+private:
+    // Sex resonanssträngar, stämda efter bordunen (samma intervall som i DSP:n), med stämskruvar i mässing.
+    void paintStrings (juce::Graphics& g)
+    {
+        if (stringsArea.isEmpty()) return;
+        static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H" };
+        static constexpr int intervals[6] = { 0, 7, 12, 15, 17, 19 };
+        const int root = juce::jmax (0, droneNote.getSelectedItemIndex());
+        const auto a = stringsArea.toFloat();
+        const float glow = (float) symp.slider.valueToProportionOfLength (symp.slider.getValue());
+        for (int k = 0; k < 6; ++k)
+        {
+            const float y = a.getY() + a.getHeight() * ((float) k + 0.5f) / 6.0f;
+            drawRivet (g, { a.getX() + 30.0f, y }, 4.0f);
+            drawRivet (g, { a.getRight() - 6.0f, y }, 3.0f);
+            g.setColour (colours::brassLight.withAlpha (0.35f + 0.5f * glow));
+            g.drawLine (a.getX() + 34.0f, y, a.getRight() - 9.0f, y, 0.8f + 0.25f * (float) (5 - k));
+            g.setColour (colours::engraving.withAlpha (0.8f));
+            g.setFont (panelFont (10.0f));
+            g.drawText (names[(root + intervals[k]) % 12], juce::Rectangle<float> (a.getX(), y - 7.0f, 22.0f, 14.0f),
+                        juce::Justification::centredRight);
+        }
+    }
+
+    static juce::String u8 (const char* s) { return juce::String::fromUTF8 (s); }
+
+    KrangKnob timbre { u8 ("Klangfärg") }, bow { u8 ("Stråke") }, drift { "Drift" },
+              drone { "Bordun" }, symp { "Resonans" };
+    juce::ComboBox droneNote;
+    KrangFader attack { "ATTACK" }, release { "RELEASE" };
+    std::vector<std::pair<juce::Rectangle<int>, juce::String>> frames;
+    juce::Rectangle<int> stringsArea;
+    textures::BackgroundCache background;
+};
+
+// --- Spolslingan ----------------------------------------------------------------
+
+class SpolslinganPanel : public juce::Component
+{
+public:
+    SpolslinganPanel()
+    {
+        for (auto* c : std::initializer_list<juce::Component*> { &ratio, &index, &decay, &harp, &mouth, &grain, &grainMs, &spread,
+                                                                 &arpMode, &arpRate, &arpOct, &attack, &release })
+            addAndMakeVisible (c);
+        decay.labelSize = 11.0f;
+        arpOct.labelSize = 11.0f;
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
+        for (auto& [r, title] : frames)
+            drawModuleFrame (g, r.toFloat(), title);
+        g.setColour (colours::brass);
+        g.setFont (panelFont (10.0f, false));
+        g.drawText ("RIKTNING", arpMode.getBounds().translated (0, -14).withHeight (12), juce::Justification::centredLeft);
+        g.drawText ("TAKT", arpRate.getBounds().translated (0, -14).withHeight (12), juce::Justification::centredLeft);
+    }
+
+    void resized() override
+    {
+        background.invalidate();
+        frames.clear();
+        auto r = getLocalBounds().reduced (12, 10);
+        auto fm    = r.removeFromLeft (300); r.removeFromLeft (12);
+        auto mun   = r.removeFromLeft (210); r.removeFromLeft (12);
+        auto korn  = r.removeFromLeft (300); r.removeFromLeft (12);
+        auto env   = r.removeFromRight (130); r.removeFromRight (12);
+        auto slinga = r;
+        frames = { { fm, "FM-spolen" }, { mun, "Munharpa" }, { korn, "Radiokorn" }, { slinga, "Slingan" }, { env, "Envelope" } };
+
+        auto knobRow = [] (juce::Rectangle<int> f) { return f.withTrimmedTop (28).reduced (6, 4).withSizeKeepingCentre (f.getWidth() - 12, 140); };
+        layoutRow (knobRow (fm),   { &ratio, &index, &decay }, 92);
+        layoutRow (knobRow (mun),  { &harp, &mouth }, 92);
+        layoutRow (knobRow (korn), { &grain, &grainMs, &spread }, 92);
+
+        auto sl = slinga.withTrimmedTop (28).reduced (12, 8);
+        auto combos = sl.removeFromLeft (90);
+        arpMode.setBounds (combos.withSizeKeepingCentre (88, 26).translated (0, -34));
+        arpRate.setBounds (combos.withSizeKeepingCentre (88, 26).translated (0, 34));
+        sl.removeFromLeft (4);
+        arpOct.setBounds (sl.withSizeKeepingCentre (juce::jmin (sl.getWidth(), 92), 140));
+
+        layoutRow (env.withTrimmedTop (28).reduced (6, 8), { &attack, &release }, 56);
+    }
+
+    Bindings bindings()
+    {
+        return { { { &ratio.slider, "spRatio" }, { &index.slider, "spIndex" }, { &decay.slider, "spDecay" },
+                   { &harp.slider, "spHarp" }, { &mouth.slider, "spMouth" }, { &grain.slider, "spGrain" },
+                   { &grainMs.slider, "spGrainMs" }, { &spread.slider, "spSpread" }, { &arpOct.slider, "spArpOct" },
+                   { &attack.slider, "spAttack" }, { &release.slider, "spRelease" } },
+                 { { &arpMode, "spArp" }, { &arpRate, "spArpRate" } } };
+    }
+
+private:
+    static juce::String u8 (const char* s) { return juce::String::fromUTF8 (s); }
+
+    KrangKnob ratio { "Ratio" }, index { "Index" }, decay { "Avklingning" },
+              harp { "Munharpa" }, mouth { u8 ("Munhåla") },
+              grain { "Korn" }, grainMs { "Storlek" }, spread { "Spridning" },
+              arpOct { "Oktaver" };
+    juce::ComboBox arpMode, arpRate;
+    KrangFader attack { "ATTACK" }, release { "RELEASE" };
+    std::vector<std::pair<juce::Rectangle<int>, juce::String>> frames;
+    textures::BackgroundCache background;
 };
 
 // --- Hammarverket ---------------------------------------------------------------
@@ -162,7 +346,12 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        g.fillAll (colours::chassis);
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
         drawModuleFrame (g, voicesFrame.toFloat(), juce::String::fromUTF8 ("Röster"));
         g.setColour (colours::brass);
         g.setFont (panelFont (10.0f, false));
@@ -176,6 +365,7 @@ public:
 
     void resized() override
     {
+        background.invalidate();
         auto r = getLocalBounds();
         voicesFrame = r.removeFromRight (300).reduced (6, 10);
         steg.setBounds (r);
@@ -215,6 +405,7 @@ public:
     StegverketPanel steg;
 
 private:
+    textures::BackgroundCache background;
     KrangKnob rost { "Rost", false };
     std::array<juce::Slider, (size_t) numDrums> tune, decay, level;
     juce::Rectangle<int> voicesFrame;
@@ -238,7 +429,12 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        g.fillAll (colours::chassis);
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
         const float y = (float) dist.getCentreY() + 10.0f;
         drawCopperPipe (g, (float) dist.getRight(), (float) filter.getX(), y);
         drawCopperPipe (g, (float) filter.getRight(), (float) reverb.getX(), y);
@@ -254,6 +450,7 @@ public:
 
     void resized() override
     {
+        background.invalidate();
         auto r = getLocalBounds().reduced (12, 8).withTrimmedBottom (8);
         const int pipe = 34;
         const int total = r.getWidth() - 2 * pipe;
@@ -282,6 +479,7 @@ public:
     }
 
 private:
+    textures::BackgroundCache background;
     static juce::String u8 (const char* s) { return juce::String::fromUTF8 (s); }
 
     juce::ComboBox distMode, fxMode, rvbMode;

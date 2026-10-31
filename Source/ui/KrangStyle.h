@@ -5,6 +5,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "Textures.h"
 #include <cmath>
 
 namespace krang::ui
@@ -133,6 +134,15 @@ public:
         g.setGradientFill (ring);
         g.fillEllipse (Rectangle<float> (rRing * 2, rRing * 2).withCentre (c));
 
+        // Svarvspår i mässingen: tunna koncentriska ringar med varierande ljushet.
+        for (int i = 0; i < 14; ++i)
+        {
+            const float rr = rCap + (rRing - rCap) * ((float) i + 0.5f) / 14.0f;
+            const float shade = textures::detail::hash (i, (int) rRing, 5);
+            g.setColour ((shade > 0.5f ? Colours::white : Colours::black).withAlpha (0.05f + 0.07f * std::abs (shade - 0.5f)));
+            g.drawEllipse (Rectangle<float> (rr * 2, rr * 2).withCentre (c), 0.7f);
+        }
+
         // Räfflad kant: tunna mörka streck runt ringen.
         g.setColour (colours::brassDark.withAlpha (0.55f));
         for (int i = 0; i < 48; ++i)
@@ -212,8 +222,13 @@ inline juce::String VfdDisplay_upper (const juce::String& s)
 // Modulram: graverad rubrik, tunn mässingslist och nitar i hörnen.
 inline void drawModuleFrame (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& title)
 {
-    g.setColour (colours::chassisHigh.withAlpha (0.55f));
-    g.fillRoundedRectangle (r, 6.0f);
+    textures::fill (g, r, textures::plate(), 1.0f, 6.0f);
+    textures::fill (g, r, textures::rust(), 0.25f, 6.0f);
+    // Insänkt plåt: mörk kant upptill, ljus nedtill.
+    g.setColour (juce::Colours::black.withAlpha (0.45f));
+    g.drawHorizontalLine ((int) r.getY() + 1, r.getX() + 6.0f, r.getRight() - 6.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.06f));
+    g.drawHorizontalLine ((int) r.getBottom() - 2, r.getX() + 6.0f, r.getRight() - 6.0f);
     g.setColour (colours::brassDark);
     g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.2f);
     g.setColour (colours::brass.withAlpha (0.35f));
@@ -299,6 +314,7 @@ public:
 
         g.setColour (colours::vfdGlass);
         g.fillRoundedRectangle (glass, 4.0f);
+        textures::fill (g, glass, textures::plate(), 0.10f, 4.0f); // korn i glaset
 
         // Raster av glödtrådar och pixelrutnät, som på ett riktigt VFD-glas.
         g.setColour (colours::vfdText.withAlpha (0.05f));
@@ -353,9 +369,10 @@ public:
         drawBrassBezel (g, r, 8.0f, 5.0f);
         auto face = r.reduced (6.0f);
 
-        ColourGradient paper (colours::meterFace, face.getX(), face.getY(),
-                              colours::meterFace.darker (0.18f), face.getX(), face.getBottom(), false);
-        g.setGradientFill (paper);
+        textures::fill (g, face, textures::meterPaper(), 1.0f, 4.0f);
+        ColourGradient shade (Colours::transparentBlack, face.getCentreX(), face.getY(),
+                              Colours::black.withAlpha (0.18f), face.getCentreX(), face.getBottom(), false);
+        g.setGradientFill (shade);
         g.fillRoundedRectangle (face, 4.0f);
 
         const Point<float> pivot (face.getCentreX(), face.getBottom() + face.getHeight() * 0.18f);
@@ -442,6 +459,144 @@ private:
 };
 
 // --- Toppanelen: display, tre rattar och mätare ---------------------------------
+// --- Radiorör som glöder ------------------------------------------------------
+// Glöden följer hur hårt maskinen drivs (Krangdrive och Krangspaken), med ett lätt flimmer.
+class TubeGlow : public juce::Component, private juce::Timer
+{
+public:
+    TubeGlow() { startTimerHz (30); }
+
+    void setGlow (float g) { target = juce::jlimit (0.0f, 1.0f, g); }
+
+    void paint (juce::Graphics& g) override
+    {
+        using namespace juce;
+        auto r = getLocalBounds().toFloat().reduced (2.0f);
+        const float w = r.getWidth(), h = r.getHeight();
+
+        // Sockel i bakelit med mässingsring.
+        auto base = r.removeFromBottom (h * 0.18f);
+        g.setColour (colours::bakelite);
+        g.fillRoundedRectangle (base, 3.0f);
+        g.setColour (colours::brass);
+        g.drawRoundedRectangle (base, 3.0f, 1.0f);
+
+        // Glaskolv: rundad topp.
+        Path bulb;
+        bulb.addRoundedRectangle (r.getX() + w * 0.1f, r.getY(), w * 0.8f, r.getHeight() + 2.0f, w * 0.4f, w * 0.4f,
+                                  true, true, false, false);
+
+        // Glöd bakom glaset.
+        const float glow = shown;
+        ColourGradient halo (colours::tubeOrange.withAlpha (0.55f * glow), r.getCentreX(), r.getCentreY() + h * 0.1f,
+                             colours::tubeOrange.withAlpha (0.0f), r.getCentreX(), r.getY() - h * 0.1f, true);
+        g.setGradientFill (halo);
+        g.fillEllipse (r.expanded (w * 0.4f, h * 0.15f));
+
+        g.setColour (Colours::black.withAlpha (0.55f));
+        g.fillPath (bulb);
+
+        // Anod (plåtcylinder) och glödtråd.
+        auto plate = Rectangle<float> (w * 0.36f, h * 0.38f).withCentre ({ r.getCentreX(), r.getCentreY() + h * 0.05f });
+        g.setColour (Colour (0xff3a3632));
+        g.fillRect (plate);
+        g.setColour (Colour (0xff5a5550));
+        g.drawRect (plate, 1.0f);
+        const auto filament = colours::tubeOrange.interpolatedWith (Colour (0xffffe2a8), glow * 0.6f);
+        g.setColour (filament.withAlpha (0.25f + 0.75f * glow));
+        for (float dx : { -0.06f, 0.06f })
+            g.drawLine (r.getCentreX() + w * dx, plate.getY() - h * 0.08f, r.getCentreX() + w * dx, plate.getBottom() + h * 0.04f,
+                        1.2f + 1.5f * glow);
+
+        // Reflex i glaset och kontur.
+        g.setColour (Colours::white.withAlpha (0.18f));
+        g.drawLine (r.getX() + w * 0.25f, r.getY() + h * 0.12f, r.getX() + w * 0.25f, r.getY() + h * 0.55f, 2.0f);
+        g.setColour (Colours::white.withAlpha (0.25f));
+        g.strokePath (bulb, PathStrokeType (1.0f));
+    }
+
+private:
+    void timerCallback() override
+    {
+        // Snabb uppvärmning, långsammare avsvalning, och lite flimmer när röret är varmt.
+        const float k = target > shown ? 0.25f : 0.06f;
+        float next = shown + (target - shown) * k;
+        next *= 1.0f - 0.06f * random.nextFloat() * next;
+        if (std::abs (next - shown) > 0.002f) { shown = next; repaint(); }
+    }
+
+    float target = 0.0f, shown = 0.0f;
+    juce::Random random;
+};
+
+// --- Krangspaken -------------------------------------------------------------------
+// En tung spak på en mässingsaxel: dra uppåt för att förstöra allt. Använder en vanlig Slider
+// (osynlig) för värde, automation och dubbelklick, och ritar spaken ovanpå.
+class KrangLever : public juce::Component
+{
+public:
+    KrangLever()
+    {
+        slider.setSliderStyle (juce::Slider::LinearVertical);
+        slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        slider.setAlpha (0.0f);  // osynlig men tar emot musen
+        slider.setDoubleClickReturnValue (true, 0.0);
+        slider.setPopupDisplayEnabled (true, true, nullptr);
+        slider.onValueChange = [this] { repaint(); };
+        addAndMakeVisible (slider);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        using namespace juce;
+        auto r = getLocalBounds().toFloat();
+        g.setColour (colours::engraving);
+        g.setFont (panelFont (11.0f));
+        g.drawText ("KRANGSPAKEN", r.removeFromTop (16.0f), Justification::centred);
+
+        auto area = r.reduced (4.0f, 4.0f);
+        const float norm = (float) slider.valueToProportionOfLength (slider.getValue());
+
+        // Spår med skala: grönt -> rött mot toppen.
+        auto slot = Rectangle<float> (12.0f, area.getHeight() - 30.0f).withCentre ({ area.getCentreX(), area.getCentreY() - 6.0f });
+        g.setColour (colours::bakelite);
+        g.fillRoundedRectangle (slot.expanded (5.0f, 3.0f), 6.0f);
+        drawBrassBezel (g, slot.expanded (5.0f, 3.0f), 6.0f, 2.0f);
+        for (int i = 0; i <= 5; ++i)
+        {
+            const float y = slot.getBottom() - slot.getHeight() * (float) i / 5.0f;
+            g.setColour (Colour (0xff4a8a3a).interpolatedWith (colours::meterRed, (float) i / 5.0f));
+            g.drawHorizontalLine ((int) y, slot.getRight() + 6.0f, slot.getRight() + 13.0f);
+            g.drawHorizontalLine ((int) y, slot.getX() - 13.0f, slot.getX() - 6.0f);
+        }
+
+        // Spakarm från axeln längst ned upp till handtaget.
+        const Point<float> pivot (slot.getCentreX(), slot.getBottom() + 14.0f);
+        const float handleY = slot.getBottom() - norm * slot.getHeight();
+        const Point<float> handle (slot.getCentreX(), handleY);
+        g.setColour (Colour (0xff8c8a86));
+        g.drawLine ({ pivot, handle }, 5.0f);
+        g.setColour (Colours::white.withAlpha (0.3f));
+        g.drawLine ({ pivot.translated (-1.5f, 0), handle.translated (-1.5f, 0) }, 1.0f);
+        drawRivet (g, pivot, 7.0f);
+
+        // Handtag: röd kula som glöder mer ju högre spaken står.
+        auto ball = Rectangle<float> (24.0f, 24.0f).withCentre (handle);
+        g.setColour (colours::meterRed.withAlpha (0.35f * norm));
+        g.fillEllipse (ball.expanded (6.0f * norm));
+        ColourGradient grad (colours::meterRed.brighter (0.6f), ball.getX() + 6.0f, ball.getY() + 5.0f,
+                             colours::meterRed.darker (0.6f), ball.getRight(), ball.getBottom(), true);
+        g.setGradientFill (grad);
+        g.fillEllipse (ball);
+        g.setColour (Colours::black.withAlpha (0.6f));
+        g.drawEllipse (ball, 1.0f);
+    }
+
+    void resized() override { slider.setBounds (getLocalBounds().withTrimmedTop (16)); }
+
+    juce::Slider slider;
+};
+
 class KrangTopPanel : public juce::Component
 {
 public:
@@ -476,12 +631,18 @@ public:
         for (auto* k : { &drive, &katedral, &master })
             addAndMakeVisible (k);
         addAndMakeVisible (meter);
-        buildBrushedMetal (1, 1);
+        addAndMakeVisible (lever);
+        addAndMakeVisible (tube);
     }
 
     void paint (juce::Graphics& g) override
     {
-        g.drawImageAt (metal, 0, 0);
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.45f);
 
         // Mässingslist längst ned och kopparrör som binder ihop rattarna.
         auto r = getLocalBounds().toFloat();
@@ -511,7 +672,7 @@ public:
 
     void resized() override
     {
-        buildBrushedMetal (getWidth(), getHeight());
+        background.invalidate();
         // Presetrad uppe till höger: PRESET < [lista] > SPARA
         auto bar = juce::Rectangle<int> (getWidth() - 20 - 400, 14, 400, 24);
         bar.removeFromLeft (58); // plats för etiketten PRESET
@@ -531,7 +692,11 @@ public:
         chamber.setBounds (left);
         r.removeFromLeft (16);
         meter.setBounds (r.removeFromRight (210).withSizeKeepingCentre (210, 130));
-        r.removeFromRight (16);
+        r.removeFromRight (14);
+        tube.setBounds (r.removeFromRight (40).withSizeKeepingCentre (40, 92));
+        r.removeFromRight (6);
+        lever.setBounds (r.removeFromRight (104).withSizeKeepingCentre (104, 168));
+        r.removeFromRight (10);
 
         knobRow = r;
         const int w = r.getWidth() / 3;
@@ -547,29 +712,12 @@ public:
     juce::TextButton prevPreset { "<" }, nextPreset { ">" }, savePreset { "SPARA" };
     KrangKnob drive { "Krangdrive" }, katedral { "Katedral" }, master { "Master" };
     NeedleMeter meter;
+    KrangLever lever;
+    TubeGlow tube;
 
 private:
-    // Borstad mörk metall: tusentals tunna horisontella streck med slumpad ljushet.
-    void buildBrushedMetal (int w, int h)
-    {
-        metal = juce::Image (juce::Image::RGB, juce::jmax (1, w), juce::jmax (1, h), true);
-        juce::Graphics g (metal);
-        juce::ColourGradient base (colours::chassisHigh, 0, 0, colours::chassis, 0, (float) h, false);
-        g.setGradientFill (base);
-        g.fillAll();
-        juce::Random rnd (0x4b42); // fast frö: samma mönster varje gång
-        for (int i = 0; i < h * 3; ++i)
-        {
-            const float y = rnd.nextFloat() * (float) h;
-            const float x0 = rnd.nextFloat() * (float) w * 0.6f;
-            const float len = (float) w * (0.2f + rnd.nextFloat() * 0.6f);
-            g.setColour (juce::Colours::white.withAlpha (rnd.nextFloat() * 0.035f));
-            g.drawHorizontalLine ((int) y, x0, x0 + len);
-        }
-    }
-
-    juce::Image metal;
     juce::Rectangle<int> knobRow;
+    textures::BackgroundCache background;
 };
 
 } // namespace krang::ui

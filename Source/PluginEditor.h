@@ -40,6 +40,8 @@ private:
     krang::ui::KrangTopPanel top;
     krang::ui::BasmalenPanel basmalen;
     krang::ui::HammarverketPanel hammarverket;
+    krang::ui::BordunorgelnPanel bordunorgeln;
+    krang::ui::SpolslinganPanel spolslingan;
     krang::ui::AngledningenPanel angledningen;
 
     // Virtuellt keyboard för att provspela utan MIDI-keyboard.

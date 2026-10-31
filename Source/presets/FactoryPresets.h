@@ -26,7 +26,10 @@ struct FactoryPreset
 // Index för valparametrar, så att listan nedan går att läsa.
 namespace mode
 {
-    constexpr float basmalen = 0, hammarverket = 1;
+    constexpr float basmalen = 0, hammarverket = 1, bordunorgeln = 2, spolslingan = 3;
+    constexpr float arpUpp = 1, arpNed = 2, arpUppNed = 3, arpSlump = 4;
+    constexpr float takt8 = 0, takt16 = 1, takt16T = 2, takt32 = 3;
+    constexpr float tonC = 0, tonD = 2, tonE = 4, tonG = 7, tonA = 9;
     constexpr float ror = 0, fuzz = 1, vikning = 2, bitkross = 3;
     constexpr float filterAv = 0, lagpass = 1, hogpass = 2, formant = 3, kam = 4;
     constexpr float hall = 0, platta = 1, rostigTank = 2;
@@ -105,6 +108,55 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "cutoff", 700.0f }, { "resonance", 0.6f }, { "envAmount", 2.0f }, { "fltA", 1.5f }, { "fltD", 2.0f }, { "fltS", 0.4f },
             { "distMode", vikning }, { "distDrive", 10.0f }, { "distMix", 0.5f },
             { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbSize", 1.0f } }, {} },
+
+        { "Bordunorgeln", "Drön och folk", { { "chamber", bordunorgeln }, { "distMix", 0.25f }, { "rvbMix", 0.25f } }, {} },
+
+        { "Nyckelharpan i ruinen", "Drön och folk",
+          { { "chamber", bordunorgeln }, { "boTimbre", 1.0f }, { "boBow", 0.5f }, { "boDrone", 0.4f }, { "boDroneNote", tonD },
+            { "boSymp", 0.8f }, { "boDrift", 0.3f }, { "boAttack", 0.15f }, { "boRelease", 1.5f },
+            { "distDrive", 8.0f }, { "distMix", 0.35f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        { "Säckpipan från Ångvik", "Drön och folk",
+          { { "chamber", bordunorgeln }, { "boTimbre", 0.5f }, { "boBow", 0.25f }, { "boDrone", 0.8f }, { "boDroneNote", tonA },
+            { "boSymp", 0.2f }, { "boAttack", 0.05f }, { "boRelease", 0.4f },
+            { "distMode", fuzz }, { "distDrive", 10.0f }, { "distMix", 0.4f }, { "rvbMode", platta }, { "rvbMix", 0.2f } }, {} },
+
+        { "Vallflöjt i dimman", "Drön och folk",
+          { { "chamber", bordunorgeln }, { "boTimbre", 0.05f }, { "boBow", 0.6f }, { "boDrone", 0.2f }, { "boDroneNote", tonG },
+            { "boSymp", 0.5f }, { "boDrift", 0.6f }, { "boAttack", 0.3f }, { "boRelease", 2.5f }, { "distMix", 0.1f },
+            { "rvbMode", hall }, { "rvbMix", 0.5f }, { "rvbSize", 0.9f }, { "rvbDark", 0.6f } }, {} },
+
+        { "Rostorgeln", "Drön och folk",
+          { { "chamber", bordunorgeln }, { "boTimbre", 0.7f }, { "boDrone", 0.7f }, { "boDroneNote", tonC }, { "boSymp", 0.6f },
+            { "boDrift", 0.8f }, { "distMode", bitkross }, { "distBits", 6.0f }, { "distDown", 3.0f }, { "distMix", 0.5f },
+            { "rvbMode", rostigTank }, { "rvbMix", 0.35f } }, {} },
+
+        // ------------------------------------------------------------------ Leads och slingor
+        { "Spolslingan", "Leads och slingor", { { "chamber", spolslingan }, { "distMix", 0.3f }, { "rvbMix", 0.2f } }, {} },
+
+        { "Munharpa i maskinhallen", "Leads och slingor",
+          { { "chamber", spolslingan }, { "spHarp", 0.9f }, { "spMouth", 0.55f }, { "spIndex", 1.0f }, { "spRelease", 0.2f },
+            { "distDrive", 10.0f }, { "distMix", 0.4f }, { "rvbMode", platta }, { "rvbMix", 0.2f } }, {} },
+
+        { "Kulning över ödemarken", "Leads och slingor",
+          { { "chamber", spolslingan }, { "spRatio", 1.0f }, { "spIndex", 1.2f }, { "spDecay", 1.5f }, { "spAttack", 0.08f },
+            { "spRelease", 1.2f }, { "distMix", 0.2f }, { "fxMode", formant }, { "fxVowel", vokalO }, { "fxReso", 0.5f },
+            { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbSize", 0.9f } }, {} },
+
+        { "Trasig radio", "Leads och slingor",
+          { { "chamber", spolslingan }, { "master", 4.0f }, { "spRatio", 3.5f }, { "spIndex", 4.0f }, { "spGrain", 0.8f }, { "spGrainMs", 60.0f },
+            { "spSpread", 0.7f }, { "distMode", bitkross }, { "distBits", 7.0f }, { "distMix", 0.3f },
+            { "rvbMode", rostigTank }, { "rvbMix", 0.2f } }, {} },
+
+        { "Ångslinga", "Leads och slingor",
+          { { "chamber", spolslingan }, { "spArp", arpUpp }, { "spArpRate", takt16 }, { "spArpOct", 2.0f },
+            { "spRatio", 2.0f }, { "spIndex", 5.0f }, { "spDecay", 0.12f }, { "spRelease", 0.1f }, { "seqTempo", 112.0f },
+            { "distDrive", 14.0f }, { "rvbMode", platta }, { "rvbMix", 0.15f } }, {} },
+
+        { "Spolpuls i ruinen", "Leads och slingor",
+          { { "chamber", spolslingan }, { "spArp", arpSlump }, { "spArpRate", takt16T }, { "spArpOct", 3.0f },
+            { "spRatio", 1.41f }, { "spIndex", 6.0f }, { "spDecay", 0.2f }, { "spRelease", 0.15f }, { "spGrain", 0.3f },
+            { "seqTempo", 90.0f }, { "distMix", 0.5f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
 
         // ------------------------------------------------------------------ Trummor
         { "Init Hammarverket", "Trummor", { { "chamber", hammarverket } },

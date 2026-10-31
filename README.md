@@ -4,7 +4,7 @@
 
 Instrument-plugin (VST3, AU, CLAP) och fristående app för macOS. Allt ljud är syntetiskt.
 
-**Status: fas 2 påbörjad – Krang-panelen.** Fas 0 och 1 klara i kod. Två kammare: Basmålen (bas) och Hammarverket (trummaskin med Stegverket). Alla parametrar sitter nu på en egen frontpanel i Krang-stil, som skalas proportionellt mellan 60 och 160 %.
+**Status: fas 3 pågår.** Fyra kammare: Basmålen (bas), Hammarverket (trummaskin med Stegverket), Bordunorgeln (drön och folkklanger) och Spolslingan (leads och slingor med arpeggiatorn Slingan). Alla parametrar sitter på Krang-panelen, som skalas proportionellt mellan 60 och 160 %.
 
 ![Krang-panelen med Basmålen](docs/krangpanelen_basmalen.png)
 
@@ -12,7 +12,11 @@ Instrument-plugin (VST3, AU, CLAP) och fristående app för macOS. Allt ljud är
 
 Panelen ritas i en fast designstorlek (1200 × 850) och skalas när du drar i fönstrets hörn. Uppifrån:
 
-- **Frontpanelen:** display, kammarväljare, presets och tre stora rattar som gäller båda kamrarna: **Krangdrive** (distortionens drive), **Katedral** (reverbens mix) och **Master**. VU-mätaren visar utnivån.
+- **Frontpanelen:** display, kammarväljare, presets och tre stora rattar som gäller båda kamrarna: **Krangdrive** (distortionens drive), **Katedral** (reverbens mix) och **Master**. Bredvid sitter **Krangspaken** och ett radiorör som glöder starkare ju hårdare maskinen drivs. VU-mätaren visar utnivån.
+
+### Krangspaken
+
+En makrospak som drar hela maskinen mot sönderfall på en gång: mer drive och full distortion-mix, grövre bitkross, mer drift (tonen glider ur stämning), högre filterresonans, mer rost i trummorna och mer och mörkare reverb. Nivån kompenseras så att spaken förstör ljudet utan att bara höja volymen. Spaken är en vanlig parameter (*Krangspaken*, 0–100 %) och kan automatiseras i DAW:en; dubbelklick sätter den i botten.
 - **Kammaren:** med Basmålen vald visas oscillatorer, rörelse, filter och två envelopes (faders). Med Hammarverket vald visas Stegverket och, i linje med varje spår, rösternas Stämning, Klang och Nivå, samt Rost.
 - **Ångledningen:** Krangdistortion → Ångfilter → Katedralreverb, sammankopplade med kopparrör. Läget väljs i listan i varje modul.
 - **Keyboardet** längst ned.
@@ -20,6 +24,12 @@ Panelen ritas i en fast designstorlek (1200 × 850) och skalas när du drar i f�
 Displayen visar presetets namn och den parameter du senast rörde. Dubbelklick på en ratt eller fader återställer standardvärdet; små rattar och faders visar värdet medan du drar.
 
 ![Krang-panelen med Hammarverket](docs/krangpanelen_hammarverket.png)
+
+### Texturer
+
+Alla texturer genereras i kod (`Source/ui/Textures.h`) med fasta frön, i dubbel upplösning så att de håller vid 160 % skala: borstad chassimetall, modulplåt med nötta partier, rost och smuts, åldrat mätarpapper med en kaffefläck, korn i VFD-glaset och svarvspår i rattarnas mässing. Statiska bakgrunder ritas en gång och sparas som bild, så en hel omritning tar ungefär 20 ms (mjukvarurendering) och vanliga uppdateringar bara en bråkdel av det.
+
+**Byta mot genererade bilder (Philip):** varje textur är en funktion (`chassisMetal()`, `plate()`, `rust()`, `meterPaper()`) som returnerar en bild. Lägg en sömlös PNG, gärna 512 × 512 eller större, i `Resources/` och låt funktionen returnera den i stället; resten av gränssnittet ändras inte. `KrangSnapshot … --tid` mäter rittiden efteråt.
 
 ## Bygga lokalt
 
@@ -75,7 +85,7 @@ Byt `arm64` mot `x86_64` på en Intel-Mac.
 | `KrangBox_CLAP` | `KrangBox.clap` |
 | `KrangBox_Standalone` | `KrangBox.app` |
 | `KrangRender` | Verktyget för lyssningstest (se nedan) |
-| `KrangSnapshot` | Ritar stilprovet till PNG: `KrangSnapshot docs/stilprov.png 2` |
+| `KrangSnapshot` | Ritar stilprovet till PNG: `KrangSnapshot docs/stilprov.png 2 docs/stegverket.png --tid` (med `--tid`: mäter rittiden) |
 
 ### Installera i din DAW
 
@@ -123,7 +133,7 @@ cmake --build build --config Release --target KrangRender
 ./build/KrangRender_artefacts/Release/KrangRender renders
 ```
 
-Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross), varje trumröst för sig, varje filter- och reverbläge (med hög resonans och stort rum, som stresstest) Stegverkets startmönster och alla fabrikspresets till WAV. Testar också Stegverkets timing mot en simulerad DAW, den interna klockan och gung, på sample-nivå, och att alla fabrikspresets ligger mellan −16 och −7 dBFS RMS. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
+Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross), varje trumröst för sig, varje filter- och reverbläge (med hög resonans och stort rum, som stresstest) Stegverkets startmönster och alla fabrikspresets till WAV. Testar också Stegverkets timing mot en simulerad DAW, den interna klockan och gung, på sample-nivå, att alla fabrikspresets ligger mellan −16 och −7 dBFS RMS, och att tre presets förblir stabila med Krangspaken i topp, att Slingan spelar tonerna i rätt ordning och på rätt sample, och att Bordunorgeln med åtta röster håller sig under 25 % av en processorkärna. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
 
 ## Hammarverket
 
@@ -154,6 +164,39 @@ När Hammarverket är valt visas Stegverket under frontpanelen: ett rutnät med 
 - **Steg** sätter längden till 16, 32, 48 eller 64 steg; **Sida** 1–4 väljer vilka 16 steg som visas.
 - **RENSA** tömmer mönstret och **STANDARD** laddar startmönstret. Mönstret sparas med DAW-projektet.
 
+## Bordunorgeln
+
+Välj **Bordunorgeln** i kammarväljaren. En polyfon drönmotor (8 röster) med bandbegränsade vågtabeller:
+
+| Kontroll | Vad den gör |
+| --- | --- |
+| Klangfärg | Glider från vallflöjt (mjuk, udda deltoner) via säckpipa (nasal rörbladston) till nyckelharpa (stråkton med kroppsresonanser) |
+| Stråke | Smalbandigt brus kring tredje deltonen, som stråke eller andning |
+| Drift | Långsam ostämdhet per röst |
+| Bordun + Bordunton | En grundton och kvint i stora oktaven som ligger kvar så länge du håller en tangent |
+| Resonans (resonanssträngar) | Sex sympatiska strängar, fysiskt modellerade och stämda efter bordunen (grundton, kvint, oktav, ters, kvart, kvint), som klingar med – som understrängarna på en nyckelharpa |
+| Attack, Release | Envelope för alla röster |
+
+Åtta röster använder ungefär 3 % av en processorkärna (mätt i Linux-bygget). Fem presets finns under *Drön och folk*: Bordunorgeln, Nyckelharpan i ruinen, Säckpipan från Ångvik, Vallflöjt i dimman och Rostorgeln.
+
+![Krang-panelen med Bordunorgeln](docs/krangpanelen_bordunorgeln.png)
+
+## Spolslingan
+
+Välj **Spolslingan** i kammarväljaren. En polyfon motor (8 röster) för leads, arpeggion och slingor:
+
+| Modul | Kontroller | Vad den gör |
+| --- | --- | --- |
+| FM-spolen | Ratio, Index, Avklingning | En modulator styr en bärvåg; indexet klingar av efter anslaget så att tonen plinkar från ljus till mörk |
+| Munharpa | Munharpa, Munhåla | Ett surrande pulståg (lamellen) genom två resonanser som sveper över deltonerna, som munhålan på en munharpa |
+| Radiokorn | Korn, Storlek, Spridning | Granulär effekt: korta korn med slumpad position, tonhöjd och riktning, och ibland tystnad – en trasig radio |
+| Slingan | Riktning, Takt, Oktaver | Arpeggiator: Upp, Ned, Upp/ned eller Slump i 1/8, 1/16, 1/16-trioler eller 1/32, över 1–3 oktaver |
+| Envelope | Attack, Release | |
+
+Slingan följer DAW:ens tempo och position när DAW:en spelar; annars går den på egen klocka i Stegverkets tempo från första tangenttrycket. Sex presets finns under *Leads och slingor*: Spolslingan, Munharpa i maskinhallen, Kulning över ödemarken, Trasig radio, Ångslinga och Spolpuls i ruinen.
+
+![Krang-panelen med Spolslingan](docs/krangpanelen_spolslingan.png)
+
 ## Ångledningen (effekter)
 
 Signalvägen är: kammare → **Krangdistortion** → **Ångfilter** → **Katedralreverb** → limiter. Allt fram till reverben är mono; reverben gör ljudet stereo.
@@ -173,7 +216,8 @@ Uppe till höger på frontpanelen: `<` och `>` bläddrar, listan visar alla pres
 | Kategori | Presets |
 | --- | --- |
 | Bas | Init Basmålen, Ångvisslan, Smedjans bas, Rostig sub, Kopparrörsacid, Vikt vågbas, Domedagsbas, Tyst maskin |
-| Drön och folk | Nyckelharpsdrön, Kulning i ångan, Kamröret, Väderkvarnen |
+| Drön och folk | Nyckelharpsdrön, Kulning i ångan, Kamröret, Väderkvarnen, Bordunorgeln, Nyckelharpan i ruinen, Säckpipan från Ångvik, Vallflöjt i dimman, Rostorgeln |
+| Leads och slingor | Spolslingan, Munharpa i maskinhallen, Kulning över ödemarken, Trasig radio, Ångslinga, Spolpuls i ruinen |
 | Trummor (med mönster) | Init Hammarverket, Smedjegång, Rostig fabrik, Folkdans i ruinerna, Ångslagets puls, Bitkrossad marsch, Katedralens slagverk, Träskedsbrygga, Ventilsystemet |
 
 Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar bara det som skiljer sig från standardvärdena. Egna presets sparas som `.krang`-filer (XML) i `~/Library/Application Support/KrangBox/Presets/` och kan delas mellan datorer. Ett eget preset kan inte få samma namn som ett fabrikspreset; det får då tillägget "(eget)".
@@ -188,12 +232,16 @@ Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar ba
 | --- | --- | --- |
 | `Source/dsp/Basmalen.h` | Basmotor: 2 osc + sub, ladder-filter, envelopes, glid, drift | Sara |
 | `Source/dsp/Hammarverket.h` | Trummaskin: åtta syntetiska röster och MIDI-mappning | Sara |
+| `Source/dsp/Bordunorgeln.h` | Drönmotor: vågtabeller, stråkbrus, bordun, resonanssträngar | Sara |
+| `Source/dsp/Spolslingan.h` | Leads och slingor: FM, munharpa, radiokorn | Sara |
+| `Source/dsp/Slingan.h` | Arpeggiator med värdsynk och egen klocka | Sara |
 | `Source/dsp/Stegverket.h` | Stegsekvenser: mönster, värdsynk, intern klocka och gung | Sara |
 | `Source/dsp/KrangDistortion.h` | Rör, Fuzz, Vikning (4x översamplat), Bitkross | Sara / Justine |
 | `Source/dsp/Angledningen.h` | Ångfilter och Katedralreverb (mono in, stereo ut) | Justine |
 | `Source/dsp/KrangEngine.h` | Kopplar ihop kammare, effekter, DC-spärr och limiter | Justine |
 | `Source/Parameters.h` | Parameterträdet – ID:n får aldrig döpas om | Justine |
 | `Source/ui/KrangStyle.h` | Krang-stil: LookAndFeel, ratt, fader, modulram, kopparrör, VFD-display, VU-mätare, frontpanel | Philip |
+| `Source/ui/Textures.h` | Genererade texturer och bakgrundscache | Philip |
 | `Source/ui/Panels.h` | Modulerna: Basmålen, Hammarverket (röster + Stegverket), Ångledningen | Philip |
 | `Source/ui/StegverketPanel.h` | Stegverkets lamprutnät och transport | Philip |
 | `Source/presets/` | Fabrikspresets och PresetManager (spara, ladda, DAW-program) | Doktor Krang |

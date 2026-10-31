@@ -8,6 +8,7 @@
 #include "dsp/KrangEngine.h"
 #include "Parameters.h"
 #include "presets/PresetManager.h"
+#include "dsp/Slingan.h"
 #include <iostream>
 
 namespace
@@ -78,6 +79,22 @@ juce::MidiBuffer buildDrumMidi (double sr, double bpm, int bars, int& totalSampl
             midi.addEvent (juce::MidiMessage::noteOff (10, h.note), at + (int) (stepLen * 0.5));
         }
     totalSamples = (int) (bars * 16 * stepLen + sr * 1.5);
+    return midi;
+}
+
+// Ackordföljd för drönmotorer: Dm – G – C – Am, två slag per ackord, legato.
+juce::MidiBuffer buildChordMidi (double sr, double bpm, int& totalSamples)
+{
+    const int chords[4][3] = { { 50, 53, 57 }, { 55, 59, 62 }, { 48, 52, 55 }, { 45, 48, 52 } };
+    juce::MidiBuffer midi;
+    const int len = (int) (2.0 * sr * 60.0 / bpm);
+    for (int c = 0; c < 4; ++c)
+        for (int n : chords[c])
+        {
+            midi.addEvent (juce::MidiMessage::noteOn (1, n, 0.8f), c * len);
+            midi.addEvent (juce::MidiMessage::noteOff (1, n), (c + 1) * len - 1);
+        }
+    totalSamples = 4 * len + (int) (sr * 3.0);
     return midi;
 }
 
@@ -357,6 +374,30 @@ int main (int argc, char* argv[])
                 }
                 total = seqTotal + (int) sr * 2;
             }
+            else if (p.chamber == krang::Chamber::Bordunorgeln)
+            {
+                midi = buildChordMidi (sr, 80.0, total);
+            }
+            else if (p.chamber == krang::Chamber::Spolslingan)
+            {
+                midi = buildChordMidi (sr, 80.0, total);
+                if (p.slingan.mode != krang::ArpMode::Av)
+                {
+                    // Kör ackorden genom Slingan på egen klocka, block för block, som pluginet gör.
+                    krang::Slingan arp;
+                    arp.prepare (sr);
+                    juce::MidiBuffer arped;
+                    for (int pos = 0; pos < total; pos += blockSize)
+                    {
+                        const int n = juce::jmin (blockSize, total - pos);
+                        juce::MidiBuffer m;
+                        m.addEvents (midi, pos, n, -pos);
+                        arp.process (m, p.slingan, {}, n);
+                        arped.addEvents (m, 0, n, pos);
+                    }
+                    midi.swapWith (arped);
+                }
+            }
             else
             {
                 midi = bassMidi;
@@ -369,6 +410,71 @@ int main (int argc, char* argv[])
             // Ett preset ska höras ordentligt men inte slå i taket hela tiden.
             const bool levelOk = s.rmsDb > -16.0f && s.rmsDb < -7.0f; // presets ska ligga ungefär lika starkt
             failures += report (label.toRawUTF8(), s, latency, levelOk) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + label.replace (" ", "_") + ".wav"), out, sr);
+        }
+    }
+
+    // Slingan: fyra hållna toner, Upp, 1/16 i 120 BPM på egen klocka – rätt ordning och rätt avstånd?
+    {
+        krang::Slingan arp;
+        arp.prepare (sr);
+        krang::SlinganSettings st;
+        st.mode = krang::ArpMode::Upp; st.rate = 1; st.octaves = 2; st.tempo = 120.0;
+        const double stepSamples = sr * 60.0 / 120.0 * 0.25;
+        std::vector<std::pair<int, int>> ons;
+        const int total = (int) (sr * 2.0); // 4 slag = 16 steg
+        for (int pos = 0; pos < total; pos += blockSize)
+        {
+            juce::MidiBuffer m;
+            if (pos == 0) for (int n : { 60, 64, 67, 71 }) m.addEvent (juce::MidiMessage::noteOn (1, n, 0.8f), 0);
+            arp.process (m, st, {}, juce::jmin (blockSize, total - pos));
+            for (const auto meta : m)
+                if (meta.getMessage().isNoteOn()) ons.push_back ({ pos + meta.samplePosition, meta.getMessage().getNoteNumber() });
+        }
+        const int expected[8] = { 60, 64, 67, 71, 72, 76, 79, 83 };
+        bool ok = ons.size() == 16;
+        for (size_t i = 0; ok && i < ons.size(); ++i)
+            ok = ons[i].second == expected[i % 8] && std::abs (ons[i].first - (int) std::round ((double) i * stepSamples)) <= 1;
+        std::cout << "slingan: " << ons.size() << " toner (vantat 16), ordning och avstand " << (ok ? "OK" : "FEL") << "\n";
+        failures += ok ? 0 : 1;
+    }
+
+    // Bordunorgeln: åtta röster samtidigt – hur mycket av realtid går åt?
+    {
+        krang::EngineParams p;
+        p.chamber = krang::Chamber::Bordunorgeln;
+        p.bordunorgeln.sympathetic = 1.0f;
+        p.bordunorgeln.bow = 1.0f;
+        juce::MidiBuffer midi;
+        for (int n = 0; n < 8; ++n)
+            midi.addEvent (juce::MidiMessage::noteOn (1, 40 + n * 5, 0.8f), 0);
+        const int total = (int) (sr * 10.0);
+        const auto start = juce::Time::getMillisecondCounterHiRes();
+        const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+        const double ms = juce::Time::getMillisecondCounterHiRes() - start;
+        const double load = ms / 10000.0 * 100.0;
+        std::cout << "bordunorgeln_cpu: 8 roster, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+        failures += load < 25.0 ? 0 : 1;
+        failures += report ("bordunorgeln_8_roster", analyse (out), latency) ? 0 : 1;
+    }
+
+    // Krangspaken i botten: varje preset ska förbli stabilt och inte bli mycket starkare.
+    {
+        ParamHost host;
+        krang::StepPattern pattern;
+        krang::PresetManager presets (host.state, pattern);
+        krang::params::Reader reader (host.state);
+        int total = 0;
+        const auto midi = buildMidi (sr, 112.0, 1, total);
+        for (int i : { 0, 4, 8 }) // Init Basmålen, Kopparrörsacid, Nyckelharpsdrön
+        {
+            presets.load (i);
+            auto* spak = host.state.getParameter (krang::params::id::krang);
+            spak->setValueNotifyingHost (1.0f);
+            const auto out = renderEngine (reader.read(), midi, total + (int) sr * 2, sr, blockSize, latency);
+            const auto s = analyse (out);
+            const auto label = "krangspaken_" + presets.getEntries()[(size_t) i].name;
+            failures += report (label.toRawUTF8(), s, latency, s.rmsDb < -5.0f) ? 0 : 1;
             writeWav (outDir.getChildFile ("krangbox_" + label.replace (" ", "_") + ".wav"), out, sr);
         }
     }

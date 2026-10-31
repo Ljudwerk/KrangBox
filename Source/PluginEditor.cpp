@@ -21,6 +21,8 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
                                                              &octaveDown, &octaveUp, &keyboardHint })
         content.addAndMakeVisible (c);
     content.addChildComponent (hammarverket);
+    content.addChildComponent (bordunorgeln);
+    content.addChildComponent (spolslingan);
 
     bindAll();
 
@@ -84,8 +86,9 @@ void KrangBoxEditor::bindAll()
     bindSlider (top.drive.slider, id::distDrive);
     bindSlider (top.katedral.slider, id::rvbMix);
     bindSlider (top.master.slider, id::master);
+    bindSlider (top.lever.slider, id::krang);
 
-    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), angledningen.bindings() })
+    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), angledningen.bindings() })
     {
         for (auto& [slider, paramId] : bindings.sliders) bindSlider (*slider, paramId);
         for (auto& [combo, paramId] : bindings.combos)   bindCombo (*combo, paramId);
@@ -133,7 +136,7 @@ void KrangBoxEditor::bindCombo (juce::ComboBox& combo, const juce::String& param
 
 void KrangBoxEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (krang::ui::colours::chassis);
+    g.fillAll (krang::ui::colours::chassis); // syns bara under skalningen; innehållet täcker allt
 }
 
 void KrangBoxEditor::layoutContent()
@@ -144,6 +147,8 @@ void KrangBoxEditor::layoutContent()
     const auto chamberArea = r.removeFromTop (chamberHeight);
     basmalen.setBounds (chamberArea);
     hammarverket.setBounds (chamberArea);
+    bordunorgeln.setBounds (chamberArea);
+    spolslingan.setBounds (chamberArea);
     angledningen.setBounds (r.removeFromTop (angledningHeight));
 
     auto kb = r.reduced (12, 8);
@@ -234,6 +239,11 @@ void KrangBoxEditor::timerCallback()
 {
     top.meter.setLevel (processor.outputPeak.exchange (0.0f));
 
+    // Röret glöder med drive och Krangspaken.
+    const float drive = processor.state.getRawParameterValue (krang::params::id::distDrive)->load() / 48.0f;
+    const float spak  = processor.state.getRawParameterValue (krang::params::id::krang)->load();
+    top.tube.setGlow (0.15f + 0.6f * drive + 0.5f * spak);
+
     // Kammarmodulen följer kammarväljaren.
     const int chamber = (int) processor.state.getRawParameterValue (krang::params::id::chamber)->load();
     if (chamber != shownChamber)
@@ -241,6 +251,8 @@ void KrangBoxEditor::timerCallback()
         shownChamber = chamber;
         basmalen.setVisible (chamber == 0);
         hammarverket.setVisible (chamber == 1);
+        bordunorgeln.setVisible (chamber == 2);
+        spolslingan.setVisible (chamber == 3);
     }
 
     // Presetbyte från DAW:en (programlistan) eller nästa/föregående: följ med i listan.

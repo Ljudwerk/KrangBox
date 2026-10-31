@@ -14,6 +14,7 @@ void KrangBoxProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     keyboardState.reset();
     stegverket.prepare (sampleRate);
+    slingan.prepare (sampleRate);
     engine.prepare (sampleRate, samplesPerBlock);
     scratchRight.setSize (1, juce::jmax (1, samplesPerBlock));
     engine.setParams (reader.read());
@@ -37,24 +38,28 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     // Lägg till noter från det virtuella keyboardet (och datorns tangentbord).
     keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
 
+    // Var DAW:ens transport står (används av Stegverket och Slingan).
+    krang::Transport transport;
+    if (auto* ph = getPlayHead())
+        if (const auto pos = ph->getPosition())
+        {
+            transport.hostPlaying = pos->getIsPlaying();
+            transport.ppq = pos->getPpqPosition().orFallback (0.0);
+            transport.bpm = pos->getBpm().orFallback (120.0);
+        }
+
     // Stegverket spelar Hammarverket: följer DAW:ens transport, eller egen klocka i den fristående appen.
     if (params.chamber == krang::Chamber::Hammarverket)
-    {
-        krang::Transport transport;
-        if (auto* ph = getPlayHead())
-            if (const auto pos = ph->getPosition())
-            {
-                transport.hostPlaying = pos->getIsPlaying();
-                transport.ppq = pos->getPpqPosition().orFallback (0.0);
-                transport.bpm = pos->getBpm().orFallback (120.0);
-            }
         stegverket.process (pattern, params.stegverket, transport,
                             wrapperType == wrapperType_Standalone, buffer.getNumSamples(), midi);
-    }
     else
-    {
         stegverket.reset();
-    }
+
+    // Slingan arpeggierar det som spelas i Spolslingan.
+    if (params.chamber == krang::Chamber::Spolslingan)
+        slingan.process (midi, params.slingan, transport, buffer.getNumSamples());
+    else
+        slingan.reset();
 
     const int total = buffer.getNumSamples();
     if (scratchRight.getNumSamples() < total)
