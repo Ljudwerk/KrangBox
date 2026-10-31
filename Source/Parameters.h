@@ -37,6 +37,12 @@ namespace id
     inline constexpr auto distOut     = "distOut";
 
     inline constexpr auto master      = "master";
+
+    inline constexpr auto chamber     = "chamber";
+    inline constexpr auto hvRost      = "hvRost";
+
+    // Hammarverket: hv<röst><Tune|Decay|Level>, t.ex. "hv0Tune". Röstnummer enligt krang::Drum.
+    inline juce::String drum (int index, const char* what) { return "hv" + juce::String (index) + what; }
 }
 
 inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
@@ -61,6 +67,10 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                               .withStringFromValueFunction ([decimals] (float v, int) { return String (v, decimals); })));
     };
     auto time = [] (float maxSec) { NormalisableRange<float> r (0.001f, maxSec); r.setSkewForCentre (maxSec * 0.1f); return r; };
+
+    // Kammare
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::chamber, 1 }, "Kammare",
+                                                         StringArray { String::fromUTF8 ("Basmålen"), "Hammarverket" }, 0));
 
     // Basmålen – oscillatorer
     add (id::osc1Level, "Osc 1 Sågtand", { 0.0f, 1.0f }, 0.8f);
@@ -99,6 +109,25 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     add (id::master, "Master", { -48.0f, 6.0f }, 0.0f, "dB");
 
+    // Hammarverket
+    add (id::hvRost, "Rost", { 0.0f, 1.0f }, 0.3f);
+    for (int d = 0; d < krang::numDrums; ++d)
+    {
+        const auto name = String::fromUTF8 (krang::drumName (d));
+        const auto tuneId = id::drum (d, "Tune"), decayId = id::drum (d, "Decay"), levelId = id::drum (d, "Level");
+        auto dec = [] (int n) { return [n] (float v, int) { return String (v, n); }; };
+        p.push_back (std::make_unique<P> (ParameterID { tuneId, 1 }, name + String::fromUTF8 (" Stämning"),
+                                          NormalisableRange<float> (-12.0f, 12.0f), 0.0f,
+                                          AudioParameterFloatAttributes().withLabel ("st").withStringFromValueFunction (dec (1))));
+        NormalisableRange<float> decayRange (0.25f, 4.0f);
+        decayRange.setSkewForCentre (1.0f);
+        p.push_back (std::make_unique<P> (ParameterID { decayId, 1 }, name + " Klang", decayRange, 1.0f,
+                                          AudioParameterFloatAttributes().withLabel ("x").withStringFromValueFunction (dec (2))));
+        p.push_back (std::make_unique<P> (ParameterID { levelId, 1 }, name + String::fromUTF8 (" Nivå"),
+                                          NormalisableRange<float> (0.0f, 1.0f), 0.8f,
+                                          AudioParameterFloatAttributes().withStringFromValueFunction (dec (2))));
+    }
+
     return { p.begin(), p.end() };
 }
 
@@ -106,7 +135,16 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 class Reader
 {
 public:
-    explicit Reader (juce::AudioProcessorValueTreeState& s) : state (s) {}
+    explicit Reader (juce::AudioProcessorValueTreeState& s) : state (s)
+    {
+        // Slå upp trumparametrarna en gång: ljudtråden får inte skapa strängar.
+        for (int d = 0; d < numDrums; ++d)
+        {
+            drumTune[(size_t) d]  = s.getRawParameterValue (id::drum (d, "Tune"));
+            drumDecay[(size_t) d] = s.getRawParameterValue (id::drum (d, "Decay"));
+            drumLevel[(size_t) d] = s.getRawParameterValue (id::drum (d, "Level"));
+        }
+    }
 
     EngineParams read() const
     {
@@ -136,12 +174,23 @@ public:
         d.outputDb   = v (id::distOut);
 
         e.masterDb = v (id::master);
+
+        e.chamber = (Chamber) (int) v (id::chamber);
+        e.hammarverket.rost = v (id::hvRost);
+        for (size_t k = 0; k < (size_t) numDrums; ++k)
+        {
+            auto& dp = e.hammarverket.drums[k];
+            dp.tune  = drumTune[k]->load();
+            dp.decay = drumDecay[k]->load();
+            dp.level = drumLevel[k]->load();
+        }
         return e;
     }
 
 private:
-    float v (const char* pid) const { return state.getRawParameterValue (pid)->load(); }
+    float v (juce::StringRef pid) const { return state.getRawParameterValue (pid)->load(); }
     juce::AudioProcessorValueTreeState& state;
+    std::array<std::atomic<float>*, (size_t) numDrums> drumTune {}, drumDecay {}, drumLevel {};
 };
 
 } // namespace krang::params

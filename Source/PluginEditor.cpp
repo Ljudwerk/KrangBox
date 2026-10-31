@@ -21,6 +21,11 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     resonanceAtt = std::make_unique<Attachment> (p.state, id::resonance, top.resonance.slider);
     driveAtt     = std::make_unique<Attachment> (p.state, id::distDrive, top.drive.slider);
 
+    // Kammarväljaren: fyll med parameterns val innan den kopplas.
+    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (p.state.getParameter (id::chamber)))
+        top.chamber.addItemList (choice->choices, 1);
+    chamberAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, id::chamber, top.chamber);
+
     top.cutoff.slider.onValueChange    = [this] { lastParam = id::cutoff; };
     top.resonance.slider.onValueChange = [this] { lastParam = id::resonance; };
     top.drive.slider.onValueChange     = [this] { lastParam = id::distDrive; };
@@ -58,8 +63,8 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
 
     lastParam = id::cutoff;
     setResizable (true, true);
-    setResizeLimits (820, 700, 1600, 1500);
-    setSize (900, 980);
+    setResizeLimits (820, 600, 1600, 1500);
+    setSize (900, 780);
     startTimerHz (30);
 }
 
@@ -104,11 +109,12 @@ void KrangBoxEditor::shiftOctave (int delta)
 void KrangBoxEditor::showParameter (const char* paramId)
 {
     auto* param = processor.state.getParameter (paramId);
-    auto* mode  = processor.state.getParameter (krang::params::id::distMode);
-    if (param == nullptr || mode == nullptr)
+    auto* mode    = processor.state.getParameter (krang::params::id::distMode);
+    auto* chamber = processor.state.getParameter (krang::params::id::chamber);
+    if (param == nullptr || mode == nullptr || chamber == nullptr)
         return;
 
-    top.display.setLines (juce::String::fromUTF8 ("BASMÅLEN  ") + mode->getCurrentValueAsText(),
+    top.display.setLines (chamber->getCurrentValueAsText() + "  " + mode->getCurrentValueAsText(),
                           param->getName (24) + "  " + param->getCurrentValueAsText()
                               + " " + param->getLabel());
 }

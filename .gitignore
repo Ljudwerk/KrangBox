@@ -1,6 +1,9 @@
 build/
+local.sh
 renders/
 .DS_Store
 *.xcodeproj
 .vscode/
 .idea/
+build-*/
+Claude outputs/

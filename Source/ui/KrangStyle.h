@@ -357,6 +357,12 @@ public:
     KrangTopPanel()
     {
         addAndMakeVisible (display);
+        chamber.setColour (juce::ComboBox::backgroundColourId, colours::bakelite);
+        chamber.setColour (juce::ComboBox::textColourId, colours::engraving);
+        chamber.setColour (juce::ComboBox::outlineColourId, colours::brass);
+        chamber.setColour (juce::ComboBox::arrowColourId, colours::brass);
+        chamber.setTooltip ("Kammare: vilken ljudmotor som spelar");
+        addAndMakeVisible (chamber);
         for (auto* k : { &cutoff, &resonance, &drive })
             addAndMakeVisible (k);
         addAndMakeVisible (meter);
@@ -398,7 +404,10 @@ public:
         buildBrushedMetal (getWidth(), getHeight());
         auto r = getLocalBounds().reduced (20).withTrimmedTop (30).withTrimmedBottom (2);
 
-        display.setBounds (r.removeFromLeft (250).withSizeKeepingCentre (250, 96));
+        auto left = r.removeFromLeft (250).withSizeKeepingCentre (250, 132);
+        display.setBounds (left.removeFromTop (96));
+        left.removeFromTop (8);
+        chamber.setBounds (left);
         r.removeFromLeft (16);
         meter.setBounds (r.removeFromRight (210).withSizeKeepingCentre (210, 130));
         r.removeFromRight (16);
@@ -410,6 +419,7 @@ public:
     }
 
     VfdDisplay display;
+    juce::ComboBox chamber; // kammarväljare: Basmålen, Hammarverket, ...
     KrangKnob cutoff { "Cutoff" }, resonance { "Resonans" }, drive { "Krangdrive" };
     NeedleMeter meter;
 

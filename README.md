@@ -4,7 +4,7 @@
 
 Instrument-plugin (VST3, AU, CLAP) och fristående app för macOS. Allt ljud är syntetiskt.
 
-**Status: fas 0 – prototyp.** Basmålen (bas) och Krangdistortion är spelbara via MIDI i en DAW eller med det inbyggda virtuella keyboardet. Överst sitter Krang-stilprovet (rattar, VFD-display och VU-mätare); under det ett generiskt testgränssnitt med alla parametrar.
+**Status: fas 0 klar i kod, fas 1 påbörjad.** Två kammare: Basmålen (bas) och Hammarverket (trummaskin). Båda går genom Krangdistortion och är spelbara via MIDI i en DAW eller med det inbyggda virtuella keyboardet. Överst sitter Krang-stilprovet (rattar, VFD-display och VU-mätare); under det ett generiskt testgränssnitt med alla parametrar.
 
 ![Krang-stilprovet](docs/stilprov.png)
 
@@ -110,7 +110,24 @@ cmake --build build --config Release --target KrangRender
 ./build/KrangRender_artefacts/Release/KrangRender renders
 ```
 
-Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross) till WAV och kontrollerar NaN, toppnivå, DC och att lägena ligger inom 1,5 dB från varandra i nivå.
+Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross) och varje trumröst för sig till WAV. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
+
+## Hammarverket
+
+Välj **Hammarverket** i kammarväljaren under displayen på frontpanelen. Åtta helt syntetiska trumröster, var och en med Stämning, Klang (längd) och Nivå, plus *Rost* som lägger skrap och brus på alla röster.
+
+| MIDI-not | Röst | Vad det är | Datortangent (från C2) |
+| --- | --- | --- | --- |
+| 36 (C2) | Ångslaget | Bastrumma: sinus med tonhöjdsfall, klick och mättning | A |
+| 37 (C#2) | Skrotplåten | Rostig plåt: ringmodulerade oharmoniska toner och skrap | W |
+| 38 (D2) | Smedjan | Virvel: skinn, sejare och en klang av städ | S |
+| 39 (D#2) | Klappern | Handklapp: fyra brusskurar och en svans | E |
+| 41 (F2) | Ramtrumman | Folklig ramtrumma: membranets grundton och överton | F |
+| 42 (F#2) | Ventilen | Stängd hihat; stryper Ångröret | T |
+| 46 (A#2) | Ångröret | Öppen hihat | U |
+| 75 (D#5) | Träskedarna | Skedspel: två resonanta träklick | – (musen) |
+
+Noterna 35, 40, 43, 44, 45 och 76 går också till närmaste röst, enligt General MIDI.
 
 ## Provspela
 
@@ -121,6 +138,7 @@ Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, 
 | Sökväg | Innehåll | Ansvarig |
 | --- | --- | --- |
 | `Source/dsp/Basmalen.h` | Basmotor: 2 osc + sub, ladder-filter, envelopes, glid, drift | Sara |
+| `Source/dsp/Hammarverket.h` | Trummaskin: åtta syntetiska röster och MIDI-mappning | Sara |
 | `Source/dsp/KrangDistortion.h` | Rör, Fuzz, Vikning (4x översamplat), Bitkross | Sara / Justine |
 | `Source/dsp/KrangEngine.h` | Kopplar ihop kammare, effekter, DC-spärr och limiter | Justine |
 | `Source/Parameters.h` | Parameterträdet – ID:n får aldrig döpas om | Justine |

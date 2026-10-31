@@ -36,6 +36,7 @@ private:
 
     using Attachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     std::unique_ptr<Attachment> cutoffAtt, resonanceAtt, driveAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> chamberAtt;
 
     juce::String lastParam;
 
