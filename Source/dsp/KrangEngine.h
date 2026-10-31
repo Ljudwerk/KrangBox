@@ -1,4 +1,5 @@
-// KrangEngine – kopplar ihop kammare och Ångledningen.
+// KrangEngine – kopplar ihop kammare och Ångledningen:
+// kammare -> Krangdistortion -> Ångfilter -> DC-spärr/master -> Katedralreverb (stereo) -> limiter.
 // Delas av pluginet och KrangRender så att lyssningstest låter exakt som pluginet.
 //
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
@@ -7,6 +8,8 @@
 #include "Basmalen.h"
 #include "Hammarverket.h"
 #include "KrangDistortion.h"
+#include "Stegverket.h"
+#include "Angledningen.h"
 
 namespace krang
 {
@@ -19,7 +22,10 @@ struct EngineParams
     Chamber chamber = Chamber::Basmalen;
     BasmalenParams basmalen;
     HammarverketParams hammarverket;
+    StegverketSettings stegverket;
     DistortionParams distortion;
+    FxFilterParams filter;
+    ReverbParams reverb;
     float masterDb = 0.0f;
 };
 
@@ -31,7 +37,9 @@ public:
         basmalen.prepare (sampleRate, maxBlockSize);
         hammarverket.prepare (sampleRate, maxBlockSize);
         distortion.prepare (sampleRate, maxBlockSize);
-        limiter.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 1 });
+        filter.prepare (sampleRate, maxBlockSize);
+        reverb.prepare (sampleRate, maxBlockSize);
+        limiter.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
         limiter.setThreshold (-0.5f);
         limiter.setRelease (80.0f);
         // DC-spärr (~8 Hz): rörläget förspänner signalen och skapar likspänning.
@@ -43,6 +51,8 @@ public:
         basmalen.reset();
         hammarverket.reset();
         distortion.reset();
+        filter.reset();
+        reverb.reset();
         limiter.reset();
         dcX = dcY = 0.0f;
     }
@@ -59,6 +69,8 @@ public:
         basmalen.setParams (p.basmalen);
         hammarverket.setParams (p.hammarverket);
         distortion.setParams (p.distortion);
+        filter.setParams (p.filter);
+        reverb.setParams (p.reverb);
         masterGain = juce::Decibels::decibelsToGain (p.masterDb);
     }
 
@@ -86,24 +98,32 @@ public:
         }
     }
 
-    // Renderar mono till data[0..numSamples).
-    void render (float* data, int numSamples)
+    // Renderar stereo: kammaren och distortion/filter i mono i left, reverben sprider till left/right.
+    void render (float* left, float* right, int numSamples)
     {
-        if (chamber == Chamber::Hammarverket) hammarverket.render (data, numSamples);
-        else                                  basmalen.render (data, numSamples);
-        distortion.process (data, numSamples);
+        if (chamber == Chamber::Hammarverket) hammarverket.render (left, numSamples);
+        else                                  basmalen.render (left, numSamples);
+        distortion.process (left, numSamples);
+        filter.process (left, numSamples);
 
         for (int i = 0; i < numSamples; ++i)
         {
-            const float x = data[i];
+            const float x = left[i];
             dcY = x - dcX + dcCoef * dcY;
             dcX = x;
-            data[i] = dcY * masterGain;
+            left[i] = dcY * masterGain;
         }
 
-        float* chans[] = { data };
-        juce::dsp::AudioBlock<float> block (chans, 1, (size_t) numSamples);
+        reverb.process (left, left, right, numSamples);
+
+        float* chans[] = { left, right };
+        juce::dsp::AudioBlock<float> block (chans, 2, (size_t) numSamples);
         limiter.process (juce::dsp::ProcessContextReplacing<float> (block));
+
+        // Säkerhetstak: limitern saknar framförhållning och kan släppa igenom enstaka toppar.
+        constexpr float ceiling = 0.966f; // -0,3 dBFS
+        juce::FloatVectorOperations::clip (left, left, -ceiling, ceiling, numSamples);
+        juce::FloatVectorOperations::clip (right, right, -ceiling, ceiling, numSamples);
     }
 
     int getLatencyInSamples() const { return distortion.getLatencyInSamples(); }
@@ -113,6 +133,8 @@ private:
     Basmalen basmalen;
     Hammarverket hammarverket;
     KrangDistortion distortion;
+    AngFilter filter;
+    Katedralreverb reverb;
     juce::dsp::Limiter<float> limiter;
     float masterGain = 1.0f;
     float dcCoef = 0.999f, dcX = 0.0f, dcY = 0.0f;

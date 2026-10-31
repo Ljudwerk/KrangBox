@@ -5,10 +5,12 @@ namespace
 {
     constexpr int topHeight = 230;
     constexpr int keyboardHeight = 110;
+    constexpr int stegHeight = 300;
 }
 
 KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     : AudioProcessorEditor (p), processor (p), generic (p),
+      steg (p.pattern, p.stegverket.currentStep),
       keyboard (p.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     namespace id = krang::params::id;
@@ -25,6 +27,15 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (p.state.getParameter (id::chamber)))
         top.chamber.addItemList (choice->choices, 1);
     chamberAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, id::chamber, top.chamber);
+
+    // Stegverket
+    addChildComponent (steg);
+    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (p.state.getParameter (id::seqLength)))
+        steg.length.addItemList (choice->choices, 1);
+    seqRunAtt    = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.state, id::seqRun, steg.play);
+    seqTempoAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, id::seqTempo, steg.tempo);
+    seqSwingAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, id::seqSwing, steg.swing);
+    seqLengthAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, id::seqLength, steg.length);
 
     top.cutoff.slider.onValueChange    = [this] { lastParam = id::cutoff; };
     top.resonance.slider.onValueChange = [this] { lastParam = id::resonance; };
@@ -64,7 +75,7 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     lastParam = id::cutoff;
     setResizable (true, true);
     setResizeLimits (820, 600, 1600, 1500);
-    setSize (900, 780);
+    setSize (900, 820);
     startTimerHz (30);
 }
 
@@ -82,6 +93,8 @@ void KrangBoxEditor::resized()
 {
     auto r = getLocalBounds();
     top.setBounds (r.removeFromTop (topHeight));
+    if (showSteg)
+        steg.setBounds (r.removeFromTop (stegHeight));
 
     auto kb = r.removeFromBottom (keyboardHeight).reduced (12, 8);
     auto bar = kb.removeFromTop (26);
@@ -122,5 +135,14 @@ void KrangBoxEditor::showParameter (const char* paramId)
 void KrangBoxEditor::timerCallback()
 {
     top.meter.setLevel (processor.outputPeak.exchange (0.0f));
+
+    // Visa Stegverket bara när Hammarverket spelar.
+    const bool drums = processor.state.getRawParameterValue (krang::params::id::chamber)->load() > 0.5f;
+    if (drums != showSteg)
+    {
+        showSteg = drums;
+        steg.setVisible (drums);
+        resized();
+    }
     showParameter (lastParam.toRawUTF8());
 }

@@ -43,9 +43,14 @@ public:
     // Det virtuella keyboardet i gränssnittet skriver hit; noterna blandas in i MIDI-flödet.
     juce::MidiKeyboardState keyboardState;
 
+    // Stegverkets mönster (gränssnittet skriver, ljudtråden läser) och sekvensern själv.
+    krang::StepPattern pattern;
+    krang::Stegverket stegverket;
+
 private:
     krang::params::Reader reader { state };
     krang::KrangEngine engine;
+    juce::AudioBuffer<float> scratchRight; // höger kanal när värden bara ger en monobuss
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KrangBoxProcessor)
 };

@@ -93,6 +93,6 @@ if(KRANG_BUILD_TOOLS)
     target_include_directories(KrangSnapshot PRIVATE Source)
     target_compile_definitions(KrangSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(KrangSnapshot
-        PRIVATE juce::juce_gui_basics
+        PRIVATE juce::juce_gui_basics juce::juce_dsp
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 endif()

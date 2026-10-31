@@ -41,6 +41,21 @@ namespace id
     inline constexpr auto chamber     = "chamber";
     inline constexpr auto hvRost      = "hvRost";
 
+    inline constexpr auto fxMode      = "fxMode";
+    inline constexpr auto fxCutoff    = "fxCutoff";
+    inline constexpr auto fxReso      = "fxReso";
+    inline constexpr auto fxVowel     = "fxVowel";
+
+    inline constexpr auto rvbMode     = "rvbMode";
+    inline constexpr auto rvbMix      = "rvbMix";
+    inline constexpr auto rvbSize     = "rvbSize";
+    inline constexpr auto rvbDark     = "rvbDark";
+
+    inline constexpr auto seqRun      = "seqRun";
+    inline constexpr auto seqTempo    = "seqTempo";
+    inline constexpr auto seqSwing    = "seqSwing";
+    inline constexpr auto seqLength   = "seqLength";
+
     // Hammarverket: hv<röst><Tune|Decay|Level>, t.ex. "hv0Tune". Röstnummer enligt krang::Drum.
     inline juce::String drum (int index, const char* what) { return "hv" + juce::String (index) + what; }
 }
@@ -107,7 +122,40 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     add (id::distDown,  "Nedsampling",{ 1.0f, 32.0f, 1.0f }, 4.0f, "x");
     add (id::distOut,   "Dist Ut",    { -24.0f, 12.0f }, -6.0f, "dB");
 
+    // Ångfiltret (efter distortion)
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::fxMode, 1 }, String::fromUTF8 ("Ångfilter"),
+                                                         StringArray { "Av", String::fromUTF8 ("Lågpass"), String::fromUTF8 ("Högpass"), "Formant", "Kam" }, 0));
+    add (id::fxCutoff, "Ångfilter frekvens", { 20.0f, 18000.0f, 0.0f, 0.25f }, 2000.0f, "Hz");
+    add (id::fxReso,   "Ångfilter resonans", { 0.0f, 1.0f }, 0.3f);
+    p.push_back (std::make_unique<P> (ParameterID { id::fxVowel, 1 }, "Vokal", NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+                                      AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+                                      {
+                                          static const char* vowels[] = { "A", "E", "I", "O", "U" };
+                                          return String (vowels[jlimit (0, 4, roundToInt (v * 4.0f))]);
+                                      })));
+
+    // Katedralreverb
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::rvbMode, 1 }, "Katedralreverb",
+                                                         StringArray { "Hall", "Platta", "Rostig tank" }, 0));
+    auto percent = [] (float v, int) { return String (roundToInt (v * 100.0f)); };
+    p.push_back (std::make_unique<P> (ParameterID { id::rvbMix, 1 }, "Reverb mix", NormalisableRange<float> (0.0f, 1.0f), 0.15f,
+                                      AudioParameterFloatAttributes().withLabel ("%").withStringFromValueFunction (percent)));
+    p.push_back (std::make_unique<P> (ParameterID { id::rvbSize, 1 }, "Reverb storlek", NormalisableRange<float> (0.0f, 1.0f), 0.6f,
+                                      AudioParameterFloatAttributes().withLabel ("%").withStringFromValueFunction (percent)));
+    p.push_back (std::make_unique<P> (ParameterID { id::rvbDark, 1 }, String::fromUTF8 ("Reverb mörker"), NormalisableRange<float> (0.0f, 1.0f), 0.4f,
+                                      AudioParameterFloatAttributes().withLabel ("%").withStringFromValueFunction (percent)));
+
     add (id::master, "Master", { -48.0f, 6.0f }, 0.0f, "dB");
+
+    // Stegverket (sekvenser för Hammarverket)
+    p.push_back (std::make_unique<AudioParameterBool> (ParameterID { id::seqRun, 1 }, "Stegverket spela", false));
+    add (id::seqTempo, "Tempo", { 40.0f, 240.0f, 1.0f }, 96.0f, "BPM");
+    p.push_back (std::make_unique<P> (ParameterID { id::seqSwing, 1 }, "Gung", NormalisableRange<float> (0.0f, 0.5f), 0.0f,
+                                      AudioParameterFloatAttributes().withLabel ("%")
+                                          .withStringFromValueFunction ([] (float v, int) { return String (juce::roundToInt (v * 200.0f)); })
+                                          .withValueFromStringFunction ([] (const String& t) { return t.getFloatValue() / 200.0f; })));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::seqLength, 1 }, String::fromUTF8 ("Steglängd"),
+                                                         StringArray { "16", "32", "48", "64" }, 0));
 
     // Hammarverket
     add (id::hvRost, "Rost", { 0.0f, 1.0f }, 0.3f);
@@ -175,7 +223,21 @@ public:
 
         e.masterDb = v (id::master);
 
+        e.filter.mode      = (FxFilterMode) (int) v (id::fxMode);
+        e.filter.cutoffHz  = v (id::fxCutoff);
+        e.filter.resonance = v (id::fxReso);
+        e.filter.vowel     = v (id::fxVowel);
+
+        e.reverb.mode = (ReverbMode) (int) v (id::rvbMode);
+        e.reverb.mix  = v (id::rvbMix);
+        e.reverb.size = v (id::rvbSize);
+        e.reverb.dark = v (id::rvbDark);
+
         e.chamber = (Chamber) (int) v (id::chamber);
+        e.stegverket.run    = v (id::seqRun) > 0.5f;
+        e.stegverket.tempo  = v (id::seqTempo);
+        e.stegverket.swing  = v (id::seqSwing);
+        e.stegverket.length = 16 * (1 + (int) v (id::seqLength));
         e.hammarverket.rost = v (id::hvRost);
         for (size_t k = 0; k < (size_t) numDrums; ++k)
         {

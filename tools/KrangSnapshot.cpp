@@ -1,10 +1,11 @@
 // KrangSnapshot – ritar Krang-stilprovet till PNG utan att starta en DAW.
 //
-//   KrangSnapshot <fil.png> [skala]
+//   KrangSnapshot <fil.png> [skala] [steg-fil.png]
 //
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "ui/KrangStyle.h"
+#include "ui/StegverketPanel.h"
 #include <iostream>
 
 int main (int argc, char* argv[])
@@ -43,5 +44,27 @@ int main (int argc, char* argv[])
     juce::PNGImageFormat png;
     if (! stream.openedOk() || ! png.writeImageToStream (image, stream)) { std::cerr << "Kunde inte skriva " << argv[1] << "\n"; return 2; }
     std::cout << "Skrev " << out.getFullPathName() << " (" << image.getWidth() << "x" << image.getHeight() << ")\n";
+
+    // Valfritt: Stegverkets panel med startmönstret och steg 4 tänt.
+    if (argc > 3)
+    {
+        krang::StepPattern pattern;
+        pattern.loadDefault();
+        std::atomic<int> playing { 4 };
+        krang::ui::StegverketPanel steg (pattern, playing);
+        steg.length.addItemList ({ "16", "32", "48", "64" }, 1);
+        steg.length.setSelectedId (2);
+        steg.tempo.setRange (40.0, 240.0, 1.0);
+        steg.tempo.setValue (96.0);
+        steg.swing.setRange (0.0, 50.0, 1.0);
+        steg.swing.setValue (12.0);
+        steg.setSize (900, 300);
+        const auto img = steg.createComponentSnapshot (steg.getLocalBounds(), true, scale);
+        juce::File f2 = juce::File::getCurrentWorkingDirectory().getChildFile (argv[3]);
+        f2.deleteFile();
+        juce::FileOutputStream s2 (f2);
+        if (! s2.openedOk() || ! png.writeImageToStream (img, s2)) return 2;
+        std::cout << "Skrev " << f2.getFullPathName() << "\n";
+    }
     return 0;
 }

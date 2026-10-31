@@ -94,18 +94,18 @@ juce::AudioBuffer<float> renderEngine (const krang::EngineParams& p, const juce:
     for (int pos = 0; pos < total; pos += blockSize)
     {
         const int n = juce::jmin (blockSize, total - pos);
-        float* d = out.getWritePointer (0, pos);
+        float* l = out.getWritePointer (0, pos);
+        float* r = out.getWritePointer (1, pos);
         int local = 0;
         while (it != midi.cend() && (*it).samplePosition < pos + n)
         {
             const int at = juce::jmax (0, (*it).samplePosition - pos);
-            if (at > local) { engine.render (d + local, at - local); local = at; }
+            if (at > local) { engine.render (l + local, r + local, at - local); local = at; }
             engine.handleMidi ((*it).getMessage());
             ++it;
         }
-        if (local < n) engine.render (d + local, n - local);
+        if (local < n) engine.render (l + local, r + local, n - local);
     }
-    out.copyFrom (1, 0, out, 0, 0, total);
     return out;
 }
 
@@ -118,8 +118,8 @@ Stats analyse (const juce::AudioBuffer<float>& b)
     double sum = 0.0;
     bool finite = true;
     for (int i = 0; i < n; ++i) { finite &= std::isfinite (d[i]); sum += d[i]; }
-    return { juce::Decibels::gainToDecibels (b.getMagnitude (0, 0, n)),
-             juce::Decibels::gainToDecibels (b.getRMSLevel (0, 0, n)), sum / n, finite };
+    return { juce::Decibels::gainToDecibels (b.getMagnitude (0, n)),
+             juce::Decibels::gainToDecibels (0.5f * (b.getRMSLevel (0, 0, n) + b.getRMSLevel (1, 0, n))), sum / n, finite };
 }
 
 void writeWav (const juce::File& file, const juce::AudioBuffer<float>& b, double sr)
@@ -209,6 +209,94 @@ int main (int argc, char* argv[])
             failures += report (name.toRawUTF8(), s, latency) ? 0 : 1;
             writeWav (outDir.getChildFile ("krangbox_" + name.replace (" ", "_") + ".wav"), out, sr);
         }
+    }
+
+    // Ångfilter och Katedralreverb: varje läge, med högt ställd resonans och stort rum (stresstest för stabilitet).
+    {
+        int total = 0;
+        const auto midi = buildMidi (sr, 112.0, 1, total);
+        struct Fx { const char* name; krang::FxFilterMode filter; krang::ReverbMode reverb; float mix; };
+        const Fx fx[] = { { "lagpass",     krang::FxFilterMode::Lagpass, krang::ReverbMode::Hall,       0.0f },
+                          { "hogpass",     krang::FxFilterMode::Hogpass, krang::ReverbMode::Hall,       0.0f },
+                          { "formant",     krang::FxFilterMode::Formant, krang::ReverbMode::Hall,       0.0f },
+                          { "kam",         krang::FxFilterMode::Kam,     krang::ReverbMode::Hall,       0.0f },
+                          { "hall",        krang::FxFilterMode::Av,      krang::ReverbMode::Hall,       0.6f },
+                          { "platta",      krang::FxFilterMode::Av,      krang::ReverbMode::Platta,     0.6f },
+                          { "rostig_tank", krang::FxFilterMode::Av,      krang::ReverbMode::RostigTank, 0.6f } };
+        for (const auto& f : fx)
+        {
+            krang::EngineParams p;
+            p.filter.mode = f.filter;
+            p.filter.cutoffHz = f.filter == krang::FxFilterMode::Kam ? 110.0f : 900.0f;
+            p.filter.resonance = 0.95f;
+            p.filter.vowel = 0.5f;
+            p.reverb.mode = f.reverb;
+            p.reverb.mix = f.mix;
+            p.reverb.size = 1.0f;
+            const auto out = renderEngine (p, midi, total + (int) sr * 2, sr, blockSize, latency);
+            failures += report ((juce::String ("effekt_") + f.name).toRawUTF8(), analyse (out), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile (juce::String ("krangbox_effekt_") + f.name + ".wav"), out, sr);
+        }
+    }
+
+    // Stegverket: timing mot en simulerad DAW och intern klocka, plus en rendering via sekvensern.
+    {
+        krang::StepPattern pattern;
+        pattern.loadDefault();
+        const double bpm = 96.0, samplesPerPpq = sr * 60.0 / bpm;
+        const int bars = 4, total = (int) (bars * 4 * samplesPerPpq);
+
+        auto run = [&] (bool host, float swing, std::vector<std::pair<int, int>>& hits)
+        {
+            krang::Stegverket seq;
+            seq.prepare (sr);
+            krang::StegverketSettings st;
+            st.run = true; st.tempo = bpm; st.swing = swing;
+            for (int pos = 0; pos < total; pos += blockSize)
+            {
+                const int n = juce::jmin (blockSize, total - pos);
+                krang::Transport t { host, pos / samplesPerPpq, bpm };
+                juce::MidiBuffer m;
+                seq.process (pattern, st, t, ! host, n, m);
+                for (const auto meta : m)
+                    hits.push_back ({ pos + meta.samplePosition, meta.getMessage().getNoteNumber() });
+            }
+        };
+
+        std::vector<std::pair<int, int>> hostHits, internalHits, swingHits;
+        run (true, 0.0f, hostHits);
+        run (false, 0.0f, internalHits);
+        run (true, 0.5f, swingHits);
+
+        auto firstOf = [] (const std::vector<std::pair<int, int>>& v, int note, int after = -1)
+        {
+            for (auto& h : v) if (h.second == note && h.first > after) return h.first;
+            return -1;
+        };
+        const int expectedHits = 19 * bars;                              // 19 slag per takt i startmönstret
+        const int snareAt = firstOf (hostHits, 38);                       // steg 4 = ett slag in
+        const int hatOdd = firstOf (swingHits, 42, (int) (0.4 * samplesPerPpq)); // steg 2 (jämnt, ingen swing)
+        const int spoonSwing = firstOf (swingHits, 75);                   // steg 5 (udda): 1,25 + 0,125 ppq
+        const bool timingOk = (int) hostHits.size() == expectedHits
+                           && hostHits.size() == internalHits.size()
+                           && std::abs (snareAt - (int) samplesPerPpq) <= 1
+                           && std::abs (hatOdd - (int) (0.5 * samplesPerPpq)) <= 1
+                           && std::abs (spoonSwing - (int) (1.375 * samplesPerPpq)) <= 1;
+        std::cout << "stegverket: " << hostHits.size() << " slag (vantat " << expectedHits << "), intern klocka "
+                  << internalHits.size() << ", virvel vid " << snareAt << " (vantat " << (int) samplesPerPpq
+                  << "), gung-sked vid " << spoonSwing << " (vantat " << (int) (1.375 * samplesPerPpq) << ")  "
+                  << (timingOk ? "OK" : "FEL") << "\n";
+        failures += timingOk ? 0 : 1;
+
+        // Rendera ljudet som Stegverket spelar, genom Rör.
+        juce::MidiBuffer midi;
+        for (auto& h : internalHits)
+            midi.addEvent (juce::MidiMessage::noteOn (10, h.second, 0.8f), h.first);
+        krang::EngineParams p;
+        p.chamber = krang::Chamber::Hammarverket;
+        const auto out = renderEngine (p, midi, total + (int) sr, sr, blockSize, latency);
+        failures += report ("stegverket_ror", analyse (out), latency) ? 0 : 1;
+        writeWav (outDir.getChildFile ("krangbox_stegverket_ror.wav"), out, sr);
     }
 
     return failures == 0 ? 0 : 2;

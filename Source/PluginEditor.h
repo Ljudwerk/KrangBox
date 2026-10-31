@@ -7,6 +7,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
 #include "ui/KrangStyle.h"
+#include "ui/StegverketPanel.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 
 class KrangBoxEditor final : public juce::AudioProcessorEditor, private juce::Timer
@@ -26,6 +27,13 @@ private:
     krang::ui::KrangLookAndFeel lookAndFeel;
     krang::ui::KrangTopPanel top;
     juce::GenericAudioProcessorEditor generic;
+
+    // Stegverket visas när Hammarverket är vald kammare.
+    krang::ui::StegverketPanel steg;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> seqRunAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> seqTempoAtt, seqSwingAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> seqLengthAtt;
+    bool showSteg = false;
 
     // Virtuellt keyboard för att provspela utan MIDI-keyboard.
     juce::MidiKeyboardComponent keyboard;
