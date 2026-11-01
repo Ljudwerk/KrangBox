@@ -1,6 +1,7 @@
 // KrangSnapshot – ritar Krang-stilprovet till PNG utan att starta en DAW.
 //
-//   KrangSnapshot <fil.png> [skala] [steg-fil.png]
+//   KrangSnapshot <fil.png> [skala] [steg-fil.png] [--tid]
+//   KrangSnapshot --kaos <fil.png>   (Kaosraden med en hackad våg i Kaosskopet)
 //
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -13,6 +14,34 @@ int main (int argc, char* argv[])
 {
     if (argc < 2) { std::cerr << "Användning: KrangSnapshot <fil.png> [skala]\n"; return 1; }
     juce::ScopedJuceInitialiser_GUI gui;
+
+    if (juce::String (argv[1]) == "--kaos" && argc > 2)
+    {
+        krang::ui::KrangLookAndFeel lf;
+        krang::ui::KaosPanel kaos;
+        kaos.setLookAndFeel (&lf);
+        kaos.setSize (1200, 130);
+        // En sågtand på 110 Hz där en bit hackas och en bit söndras, som Kaosmotorn gör.
+        std::vector<float> wave (4096);
+        for (size_t i = 0; i < wave.size(); ++i)
+        {
+            const double t = (double) i / 48000.0;
+            float x = (float) (2.0 * std::fmod (t * 110.0, 1.0) - 1.0) * 0.6f;
+            if (i > 1800 && i < 2600) x = wave[1000 + (i - 1800) % 200];
+            if (i > 2600 && i < 3400) x = std::round (wave[(i / 12) * 12 - 1200] * 4.0f) / 4.0f;
+            wave[i] = x;
+        }
+        kaos.scope.setSamples (wave.data() + 1000, 3000);
+        kaos.lamp.flash();
+        const auto img = kaos.createComponentSnapshot (kaos.getLocalBounds(), true, 1.0f);
+        kaos.setLookAndFeel (nullptr);
+        juce::File f = juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]);
+        f.deleteFile();
+        juce::FileOutputStream st (f);
+        juce::PNGImageFormat png;
+        return st.openedOk() && png.writeImageToStream (img, st) ? 0 : 2;
+    }
+
     const float scale = argc > 2 ? juce::String (argv[2]).getFloatValue() : 2.0f;
 
     krang::ui::KrangLookAndFeel lf;
@@ -85,6 +114,20 @@ int main (int argc, char* argv[])
             g.setOrigin (0, 320); ang.paintEntireComponent (g, true);
         }
         std::cout << "Hel omritning: " << (juce::Time::getMillisecondCounterHiRes() - start) / runs << " ms\n";
+
+        // Kaosskopet ritas om 30 gånger i sekunden; det måste vara billigt.
+        krang::ui::Kaosskop scope;
+        scope.setSize (640, 90);
+        std::vector<float> wave (4096);
+        for (size_t i = 0; i < wave.size(); ++i) wave[i] = (float) std::sin ((double) i * 0.03);
+        const auto s0 = juce::Time::getMillisecondCounterHiRes();
+        for (int i = 0; i < runs; ++i)
+        {
+            scope.setSamples (wave.data(), (int) wave.size());
+            juce::Graphics g (canvas);
+            scope.paintEntireComponent (g, true);
+        }
+        std::cout << "Kaosskopet: " << (juce::Time::getMillisecondCounterHiRes() - s0) / runs << " ms per bild\n";
         bas.setLookAndFeel (nullptr); ang.setLookAndFeel (nullptr); panel.setLookAndFeel (nullptr);
     }
     return 0;

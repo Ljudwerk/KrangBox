@@ -32,13 +32,9 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 {
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
-    const auto params = reader.read();
-    engine.setParams (params);
+    auto params = reader.read();
 
-    // Lägg till noter från det virtuella keyboardet (och datorns tangentbord).
-    keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
-
-    // Var DAW:ens transport står (används av Stegverket och Slingan).
+    // Var DAW:ens transport står (används av Stegverket, Slingan och synkat eko).
     krang::Transport transport;
     if (auto* ph = getPlayHead())
         if (const auto pos = ph->getPosition())
@@ -47,6 +43,12 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             transport.ppq = pos->getPpqPosition().orFallback (0.0);
             transport.bpm = pos->getBpm().orFallback (120.0);
         }
+    if (transport.hostPlaying)
+        params.bpm = transport.bpm;
+    engine.setParams (params);
+
+    // Lägg till noter från det virtuella keyboardet (och datorns tangentbord).
+    keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
 
     // Stegverket spelar Hammarverket: följer DAW:ens transport, eller egen klocka i den fristående appen.
     if (params.chamber == krang::Chamber::Hammarverket)
@@ -87,6 +89,9 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         buffer.addFrom (0, 0, scratchRight, 0, 0, total);
         buffer.applyGain (0, 0, total, 0.5f);
     }
+
+    scope.push (buffer.getReadPointer (0), total);
+    kaosEvents.store (engine.getKaosEventCount(), std::memory_order_relaxed);
 
     const float peak = buffer.getMagnitude (0, total);
     float prev = outputPeak.load();

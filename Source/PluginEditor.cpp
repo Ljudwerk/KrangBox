@@ -4,8 +4,8 @@
 namespace
 {
     // Höjder i designstorlek (bredd 1200).
-    constexpr int topHeight = 230, chamberHeight = 320, angledningHeight = 190, keyboardHeight = 110;
-    static_assert (topHeight + chamberHeight + angledningHeight + keyboardHeight == KrangBoxEditor::designHeight);
+    constexpr int topHeight = 230, chamberHeight = 320, angledningHeight = 190, kaosHeight = 130, keyboardHeight = 100;
+    static_assert (topHeight + chamberHeight + angledningHeight + kaosHeight + keyboardHeight == KrangBoxEditor::designHeight);
 }
 
 KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
@@ -17,12 +17,14 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     setLookAndFeel (&lookAndFeel);
 
     addAndMakeVisible (content);
-    for (auto* c : std::initializer_list<juce::Component*> { &top, &basmalen, &angledningen, &keyboard,
+    for (auto* c : std::initializer_list<juce::Component*> { &top, &basmalen, &angledningen, &kaos, &keyboard,
                                                              &octaveDown, &octaveUp, &keyboardHint })
         content.addAndMakeVisible (c);
     content.addChildComponent (hammarverket);
     content.addChildComponent (bordunorgeln);
     content.addChildComponent (spolslingan);
+    content.addChildComponent (stalpiano);
+    content.addChildComponent (klockor);
 
     bindAll();
 
@@ -59,12 +61,12 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
 
     layoutContent();
 
-    // Proportionell storleksändring, 60–160 % av designstorleken.
+    // Proportionell storleksändring, 60–160 % av designstorleken; startar på 85 % så att den ryms på en 13-tums skärm.
     setResizable (true, true);
     setResizeLimits (designWidth * 6 / 10, designHeight * 6 / 10, designWidth * 16 / 10, designHeight * 16 / 10);
     if (auto* c = getConstrainer())
         c->setFixedAspectRatio ((double) designWidth / designHeight);
-    setSize (designWidth * 9 / 10, designHeight * 9 / 10);
+    setSize (designWidth * 85 / 100, designHeight * 85 / 100);
 
     startTimerHz (30);
     timerCallback();
@@ -81,14 +83,14 @@ void KrangBoxEditor::bindAll()
 {
     namespace id = krang::params::id;
 
-    // Frontpanelen: kammare och de tre stora rattarna, som gäller båda kamrarna.
+    // Frontpanelen: kammare och de tre stora rattarna, som gäller alla kamrar.
     bindCombo (top.chamber, id::chamber);
     bindSlider (top.drive.slider, id::distDrive);
     bindSlider (top.katedral.slider, id::rvbMix);
     bindSlider (top.master.slider, id::master);
     bindSlider (top.lever.slider, id::krang);
 
-    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), angledningen.bindings() })
+    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), stalpiano.bindings(), klockor.bindings(), angledningen.bindings(), kaos.bindings() })
     {
         for (auto& [slider, paramId] : bindings.sliders) bindSlider (*slider, paramId);
         for (auto& [combo, paramId] : bindings.combos)   bindCombo (*combo, paramId);
@@ -128,7 +130,12 @@ void KrangBoxEditor::bindCombo (juce::ComboBox& combo, const juce::String& param
         combo.clear (juce::dontSendNotification);
         combo.addItemList (choice->choices, 1);
         comboAttachments.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.state, paramId, combo));
-        combo.onChange = [this, paramId] { lastParam = paramId; };
+        // Behåll panelens egen onChange (t.ex. strängbädden som ritas om) och visa parametern i displayen.
+        combo.onChange = [this, paramId, previous = combo.onChange]
+        {
+            lastParam = paramId;
+            if (previous) previous();
+        };
     }
 }
 
@@ -149,9 +156,12 @@ void KrangBoxEditor::layoutContent()
     hammarverket.setBounds (chamberArea);
     bordunorgeln.setBounds (chamberArea);
     spolslingan.setBounds (chamberArea);
+    stalpiano.setBounds (chamberArea);
+    klockor.setBounds (chamberArea);
     angledningen.setBounds (r.removeFromTop (angledningHeight));
+    kaos.setBounds (r.removeFromTop (kaosHeight));
 
-    auto kb = r.reduced (12, 8);
+    auto kb = r.reduced (12, 6);
     auto bar = kb.removeFromTop (26);
     octaveDown.setBounds (bar.removeFromLeft (64));
     bar.removeFromLeft (6);
@@ -244,6 +254,20 @@ void KrangBoxEditor::timerCallback()
     const float spak  = processor.state.getRawParameterValue (krang::params::id::krang)->load();
     top.tube.setGlow (0.15f + 0.6f * drive + 0.5f * spak);
 
+    // Kaosskopet och kaoslampan.
+    {
+        auto& tap = processor.scope;
+        const int w = tap.writeIndex.load (std::memory_order_acquire);
+        constexpr int n = KrangBoxProcessor::ScopeTap::size;
+        for (int i = 0; i < n; ++i)
+            scopeCopy[(size_t) i] = tap.samples[(size_t) ((w + i) & (n - 1))].load (std::memory_order_relaxed);
+        kaos.scope.setSamples (scopeCopy.data(), n);
+
+        const auto events = processor.kaosEvents.load (std::memory_order_relaxed);
+        if (events != shownKaosEvents) { shownKaosEvents = events; kaos.lamp.flash(); }
+        else kaos.lamp.decay();
+    }
+
     // Kammarmodulen följer kammarväljaren.
     const int chamber = (int) processor.state.getRawParameterValue (krang::params::id::chamber)->load();
     if (chamber != shownChamber)
@@ -253,6 +277,8 @@ void KrangBoxEditor::timerCallback()
         hammarverket.setVisible (chamber == 1);
         bordunorgeln.setVisible (chamber == 2);
         spolslingan.setVisible (chamber == 3);
+        stalpiano.setVisible (chamber == 4);
+        klockor.setVisible (chamber == 5);
     }
 
     // Presetbyte från DAW:en (programlistan) eller nästa/föregående: följ med i listan.

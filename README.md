@@ -4,21 +4,22 @@
 
 Instrument-plugin (VST3, AU, CLAP) och fristående app för macOS. Allt ljud är syntetiskt.
 
-**Status: fas 3 pågår.** Fyra kammare: Basmålen (bas), Hammarverket (trummaskin med Stegverket), Bordunorgeln (drön och folkklanger) och Spolslingan (leads och slingor med arpeggiatorn Slingan). Alla parametrar sitter på Krang-panelen, som skalas proportionellt mellan 60 och 160 %.
+**Status: fas 3 klar i kod, fas 3b pågår.** Sex kammare: Basmålen (bas), Hammarverket (trummaskin med Stegverket), Bordunorgeln (drön och folkklanger), Spolslingan (leads och slingor med arpeggiatorn Slingan) Stålpiano (piano, hackbräde och preparerat piano) och Klockgjuteriet (klockor och gonger). Planerade: Kören i schaktet, Lurblåsaren, Lutverket, Vattenpumpen och Radiomasten. Kaosmotorn gör allt opålitligt. Alla parametrar sitter på Krang-panelen, som skalas proportionellt mellan 60 och 160 %.
 
 ![Krang-panelen med Basmålen](docs/krangpanelen_basmalen.png)
 
 ## Krang-panelen
 
-Panelen ritas i en fast designstorlek (1200 × 850) och skalas när du drar i fönstrets hörn. Uppifrån:
+Panelen ritas i en fast designstorlek (1200 × 970) och skalas när du drar i fönstrets hörn (60–160 %, startar på 85 %). Uppifrån:
 
-- **Frontpanelen:** display, kammarväljare, presets och tre stora rattar som gäller båda kamrarna: **Krangdrive** (distortionens drive), **Katedral** (reverbens mix) och **Master**. Bredvid sitter **Krangspaken** och ett radiorör som glöder starkare ju hårdare maskinen drivs. VU-mätaren visar utnivån.
+- **Frontpanelen:** display, kammarväljare, presets och tre stora rattar som gäller alla kamrar: **Krangdrive** (distortionens drive), **Katedral** (reverbens mix) och **Master**. Bredvid sitter **Krangspaken** och ett radiorör som glöder starkare ju hårdare maskinen drivs. VU-mätaren visar utnivån.
 
 ### Krangspaken
 
-En makrospak som drar hela maskinen mot sönderfall på en gång: mer drive och full distortion-mix, grövre bitkross, mer drift (tonen glider ur stämning), högre filterresonans, mer rost i trummorna och mer och mörkare reverb. Nivån kompenseras så att spaken förstör ljudet utan att bara höja volymen. Spaken är en vanlig parameter (*Krangspaken*, 0–100 %) och kan automatiseras i DAW:en; dubbelklick sätter den i botten.
+En makrospak som drar hela maskinen mot sönderfall på en gång: mer drive och full distortion-mix, grövre bitkross, mer drift (tonen glider ur stämning), högre filterresonans, mer rost i trummorna, ett slitnare band, ett självsvängande eko, en Kaosmotor som börjar hacka och mer och mörkare reverb. Nivån kompenseras så att spaken förstör ljudet utan att bara höja volymen. Spaken är en vanlig parameter (*Krangspaken*, 0–100 %) och kan automatiseras i DAW:en; dubbelklick sätter den i botten.
 - **Kammaren:** med Basmålen vald visas oscillatorer, rörelse, filter och två envelopes (faders). Med Hammarverket vald visas Stegverket och, i linje med varje spår, rösternas Stämning, Klang och Nivå, samt Rost.
-- **Ångledningen:** Krangdistortion → Ångfilter → Katedralreverb, sammankopplade med kopparrör. Läget väljs i listan i varje modul.
+- **Ångledningen:** Krangdistortion → Ångfilter → Bandmaskinen → Ekokammaren → Katedralreverb, sammankopplade med kopparrör. Läget väljs i listan i varje modul.
+- **Kaosraden:** Kaosmotorn med kaoslampan, och Kaosskopet – ett oscilloskop som visar utgången.
 - **Keyboardet** längst ned.
 
 Displayen visar presetets namn och den parameter du senast rörde. Dubbelklick på en ratt eller fader återställer standardvärdet; små rattar och faders visar värdet medan du drar.
@@ -85,7 +86,7 @@ Byt `arm64` mot `x86_64` på en Intel-Mac.
 | `KrangBox_CLAP` | `KrangBox.clap` |
 | `KrangBox_Standalone` | `KrangBox.app` |
 | `KrangRender` | Verktyget för lyssningstest (se nedan) |
-| `KrangSnapshot` | Ritar stilprovet till PNG: `KrangSnapshot docs/stilprov.png 2 docs/stegverket.png --tid` (med `--tid`: mäter rittiden) |
+| `KrangSnapshot` | Ritar stilprovet till PNG: `KrangSnapshot docs/stilprov.png 2 docs/stegverket.png --tid` (med `--tid`: mäter rittiden, även Kaosskopet); `KrangSnapshot --kaos fil.png` ritar Kaosraden |
 
 ### Installera i din DAW
 
@@ -133,7 +134,7 @@ cmake --build build --config Release --target KrangRender
 ./build/KrangRender_artefacts/Release/KrangRender renders
 ```
 
-Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross), varje trumröst för sig, varje filter- och reverbläge (med hög resonans och stort rum, som stresstest) Stegverkets startmönster och alla fabrikspresets till WAV. Testar också Stegverkets timing mot en simulerad DAW, den interna klockan och gung, på sample-nivå, att alla fabrikspresets ligger mellan −16 och −7 dBFS RMS, och att tre presets förblir stabila med Krangspaken i topp, att Slingan spelar tonerna i rätt ordning och på rätt sample, och att Bordunorgeln med åtta röster håller sig under 25 % av en processorkärna. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
+Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross), varje trumröst för sig, varje filter- och reverbläge (med hög resonans och stort rum, som stresstest) Stegverkets startmönster och alla fabrikspresets till WAV. Testar också Stegverkets timing mot en simulerad DAW, den interna klockan och gung, på sample-nivå, att alla fabrikspresets ligger mellan −16 och −7 dBFS RMS, och att tre presets förblir stabila med Krangspaken i topp, att Slingan spelar tonerna i rätt ordning och på rätt sample, och att Bordunorgeln med åtta röster håller sig under 25 % av en processorkärna. Ekokammarens tid mäts på sample-nivå, ekot ska överleva 110 % återkoppling, Kaosmotorn ska slå till på taktslagen utan klick och vara helt avstängd på noll. Stålpianot renderas i alla tre lägena, pedalen testas (en släppt ton ska tystna utan pedal och klinga vidare med), och sexton röster ska hålla sig under 25 % av en kärna. Alla sex strängmaterial renderas; stålets ton ska ligga still medan djurhudens sjunker efter anslaget, och silke och djurhud ska klinga kortare än stål. Klockgjuteriet renderas i alla fem klocktyper, även spruckna med Krangspaken i botten; svepet ska höja tonen och tolv gonger ska hålla sig under 25 % av en kärna. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
 
 ## Hammarverket
 
@@ -197,17 +198,101 @@ Slingan följer DAW:ens tempo och position när DAW:en spelar; annars går den p
 
 ![Krang-panelen med Spolslingan](docs/krangpanelen_spolslingan.png)
 
+## Stålpiano
+
+Den femte kammaren: piano, hackbräde och preparerat piano med sex strängmaterial, helt syntetiskt med modalsyntes (16 röster). Varje ton är en summa av strängens deltoner, och hammaren är en kort kraftpuls in i dem.
+
+| Läge | Klang |
+| --- | --- |
+| Piano | Filthammare, två eller tre strängar per ton (en i basen), dämpare när tangenten släpps |
+| Hackbräde | Hårda klubbor, tre strängar per kor som svävar mer, inga dämpare – strängarna klingar ut av sig själva |
+| Preparerat | Skruvar mellan strängarna: deltonerna förskjuts, klingar kortare och skruvarna klingar med egna oharmoniska toner |
+
+**Strängmaterial** väljs i listan i Strängar-modulen och påverkar styvhet, klingtid, glans och hur jämn strängen är:
+
+| Material | Klang |
+| --- | --- |
+| Stål | Klar och metallisk, grundljudet |
+| Mässing | Varmare och gyllene, lite kortare |
+| Koppar | Lindad: mörk, rund och lång |
+| Järn | Hårt och ojämnt, med lite rost i sig |
+| Silke | Mjukt och kort, tonen sjunker en aning efter anslaget, som en qin |
+| Djurhud | Dov och ojämn, med kraftigt duns; spänningen släpper efter slaget så att tonen sjunker som på ett trumskinn |
+
+| Ratt | Vad den gör |
+| --- | --- |
+| Hårdhet | Mjuk filt till hård stålhammare – hur många höga deltoner som väcks |
+| Anslag | Var på strängen hammaren slår; deltoner med nod där tystnar |
+| Styvhet | Stålets styvhet: deltonerna dras uppåt, metalliskt och "falskt" |
+| Svävning | Hur ostämda strängarna i samma ton är mot varandra (cent) |
+| Klingtid | Hur länge mellanregistret klingar; basen klingar längre, diskanten kortare |
+| Dämpare | Hur snabbt dämparen tystar en släppt ton |
+| Botten | Klangbotten: tre resonanser som ger en trälåda att klinga i |
+| Rost | En kedja som rasslar på strängarna, i takt med deras rörelse |
+
+Högerpedalen (sustain, MIDI CC64) håller dämparna borta. Krangspaken ger mer rost, mer svävning och styvare strängar.
+
+![Krang-panelen med Stålpiano](docs/krangpanelen_stalpiano.png)
+
+## Klockgjuteriet
+
+Den sjätte kammaren: klockor, gonger och metallslag, med samma modalsyntes som Stålpianot men med klockornas oharmoniska deltoner (12 röster).
+
+| Klocktyp | Klang |
+| --- | --- |
+| Kyrkklocka | Brumton under, ters och kvint ovanför – den klassiska, lite molliga kyrkklockan |
+| Skälla | Fäbodens kogälla: kort, ihålig och skramlande |
+| Gong | Täta deltoner som klingar länge |
+| Räls | En fri stålbalk: få, glesa och mycket oharmoniska deltoner |
+| Skålklocka | Sjungande skål: långa toner som svävar i par |
+
+| Ratt | Vad den gör |
+| --- | --- |
+| Kläpp | Kläppens hårdhet: hur mycket diskant slaget väcker |
+| Brum | Brumtonens styrka, oktaven under (kyrkklocka och gong) |
+| Svävning | Klockan är aldrig helt rund: varje delton är ett par som svävar mot varandra |
+| Spricka | Förskjuter deltonerna, kortar klangen och får sprickan att skorra |
+| Svep | Tonen glider efter slaget, upp eller ned (±300 cent), som en operagong |
+| Klingtid | Hur länge klockan klingar; låga klockor klingar längre |
+| Släpp | Dämpning när tangenten släpps; i botten klingar klockan ut av sig själv |
+
+Krangspaken spräcker klockan och ökar svävningen.
+
+![Krang-panelen med Klockgjuteriet](docs/krangpanelen_klockgjuteriet.png)
+
 ## Ångledningen (effekter)
 
-Signalvägen är: kammare → **Krangdistortion** → **Ångfilter** → **Katedralreverb** → limiter. Allt fram till reverben är mono; reverben gör ljudet stereo.
+Signalvägen är: kammare → **Kaosmotorn** → **Krangdistortion** → **Ångfilter** → **Bandmaskinen** → **Ekokammaren** → **Katedralreverb** → limiter. Allt fram till reverben är mono; reverben gör ljudet stereo.
 
 | Effekt | Lägen | Inställningar |
 | --- | --- | --- |
 | Krangdistortion | Rör, Fuzz, Vikning, Bitkross | Drive, Mix, Bitar, Nedsampling, Ut |
 | Ångfilter | Av, Lågpass, Högpass, Formant, Kam | Frekvens, Resonans, Vokal (A–U, för Formant) |
+| Bandmaskinen | – | Wow, Flutter, Ålder, Avbrott |
+| Ekokammaren | Fri, 1/4, 1/8, 1/8 punkt., 1/16, 1/4 triol | Tid (i läget Fri), Återkoppling, Mörker, Mix |
 | Katedralreverb | Hall, Platta, Rostig tank (fjäderreverb) | Mix, Storlek, Mörker |
 
 Kam ger en metallisk ton på vald frekvens, som ljud genom ett långt rör. Formant låter ljudet "säga" vokaler. Utgången har ett tak på −0,3 dBFS.
+
+**Bandmaskinen** är ett slitet rullband: *Wow* är långsam tonhöjdsvajning, *Flutter* snabb darrning, *Ålder* ger bandmättning, sus och förlorad diskant, och *Avbrott* låter bandet tappa kontakten med tonhuvudet då och då. Med alla fyra på noll är bandmaskinen helt förbikopplad.
+
+**Ekokammaren** är ett bandeko. I synkade lägen följer ekotiden DAW:ens tempo (eller Stegverkets tempo i standalone); i läget *Fri* gäller Tid. Varje upprepning blir mörkare (*Mörker*), och återkopplingen mättas, så att den kan vridas över 100 % till självsvängning utan att skena. Ändrar du tiden glider tonhöjden som på en riktig bandeko. Mix på noll stänger av ekot. Krangspaken driver ekot mot självsvängning om det är påslaget.
+
+![Ångledningen med fem moduler](docs/krangpanelen_angledningen.png)
+
+## Kaosmotorn
+
+Kaosmotorn sitter direkt efter kammaren och gör maskinen opålitlig. Varje taktslag slår den en tärning: med sannolikheten **Kaos** händer något under nästa slag. Vad som händer väljs slumpvis, viktat efter tre rattar:
+
+| Ratt | Vad som händer |
+| --- | --- |
+| Hack | En bit av det som just spelats upprepas, som en hackande skiva (ett helt, ett halvt eller ett kvarts slag) |
+| Bakåt | Senaste slaget spelas baklänges |
+| Söndring | Slaget samplas ned och bitreduceras, som en trasig D/A-omvandlare |
+
+**Takt** väljer slagen: 1/4, 1/8, 1/16 eller 1/32 i DAW:ens tempo (Stegverkets i standalone), eller *Fri* med **Fri takt** i Hz. **Drift** låter tonhöjden vandra slumpmässigt, som en motor som går ojämnt. Kaoslampan blixtrar när motorn slår till. Med Kaos på noll är motorn helt förbikopplad. Krangspaken väcker Kaosmotorn även när den är avstängd.
+
+![Krang-panelen med Kaosmotorn och Kaosskopet](docs/krangpanelen_kaosmotorn.png)
 
 ## Presets
 
@@ -215,10 +300,12 @@ Uppe till höger på frontpanelen: `<` och `>` bläddrar, listan visar alla pres
 
 | Kategori | Presets |
 | --- | --- |
-| Bas | Init Basmålen, Ångvisslan, Smedjans bas, Rostig sub, Kopparrörsacid, Vikt vågbas, Domedagsbas, Tyst maskin |
-| Drön och folk | Nyckelharpsdrön, Kulning i ångan, Kamröret, Väderkvarnen, Bordunorgeln, Nyckelharpan i ruinen, Säckpipan från Ångvik, Vallflöjt i dimman, Rostorgeln |
-| Leads och slingor | Spolslingan, Munharpa i maskinhallen, Kulning över ödemarken, Trasig radio, Ångslinga, Spolpuls i ruinen |
-| Trummor (med mönster) | Init Hammarverket, Smedjegång, Rostig fabrik, Folkdans i ruinerna, Ångslagets puls, Bitkrossad marsch, Katedralens slagverk, Träskedsbrygga, Ventilsystemet |
+| Bas | Init Basmålen, Ångvisslan, Smedjans bas, Rostig sub, Kopparrörsacid, Vikt vågbas, Domedagsbas, Tyst maskin, Slitet band, Hackande maskin |
+| Drön och folk | Nyckelharpsdrön, Kulning i ångan, Kamröret, Väderkvarnen, Bordunorgeln, Nyckelharpan i ruinen, Säckpipan från Ångvik, Vallflöjt i dimman, Rostorgeln, Gammal rulle |
+| Leads och slingor | Spolslingan, Munharpa i maskinhallen, Kulning över ödemarken, Trasig radio, Ångslinga, Spolpuls i ruinen, Ekon från ödemarken, Radion i bunkern |
+| Stålpiano | Init Stålpiano, Missionshuset, Hackbrädet, Skruvat piano, Stålregn, Kedjepianot, Hudharpan, Silkesqin, Kopparharpan |
+| Klockor | Init Klockgjuteriet, Kyrkklockan i dimman, Fäbodskällan, Operagongen, Rälsen i tunneln, Sprucken kyrkklocka, Sjungande skålen |
+| Trummor (med mönster) | Init Hammarverket, Smedjegång, Rostig fabrik, Folkdans i ruinerna, Ångslagets puls, Bitkrossad marsch, Katedralens slagverk, Träskedsbrygga, Ventilsystemet, Ekande smedja, Trasig trummaskin |
 
 Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar bara det som skiljer sig från standardvärdena. Egna presets sparas som `.krang`-filer (XML) i `~/Library/Application Support/KrangBox/Presets/` och kan delas mellan datorer. Ett eget preset kan inte få samma namn som ett fabrikspreset; det får då tillägget "(eget)".
 
@@ -234,10 +321,14 @@ Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar ba
 | `Source/dsp/Hammarverket.h` | Trummaskin: åtta syntetiska röster och MIDI-mappning | Sara |
 | `Source/dsp/Bordunorgeln.h` | Drönmotor: vågtabeller, stråkbrus, bordun, resonanssträngar | Sara |
 | `Source/dsp/Spolslingan.h` | Leads och slingor: FM, munharpa, radiokorn | Sara |
+| `Source/dsp/Klockgjuteriet.h` | Klockgjuteriet: modalsyntes för klockor, gonger, räls och skålar | Sara |
+| `Source/dsp/Stalpiano.h` | Stålpiano: modalsyntes för piano, hackbräde och preparerat piano | Sara |
 | `Source/dsp/Slingan.h` | Arpeggiator med värdsynk och egen klocka | Sara |
 | `Source/dsp/Stegverket.h` | Stegsekvenser: mönster, värdsynk, intern klocka och gung | Sara |
 | `Source/dsp/KrangDistortion.h` | Rör, Fuzz, Vikning (4x översamplat), Bitkross | Sara / Justine |
 | `Source/dsp/Angledningen.h` | Ångfilter och Katedralreverb (mono in, stereo ut) | Justine |
+| `Source/dsp/Kaosmotorn.h` | Kaosmotorn: hack, baklänges, söndring och slumpdrift | Sara |
+| `Source/dsp/Bandmaskin.h` | Bandmaskinen (wow, flutter, ålder, avbrott) och Ekokammaren (synkat bandeko) | Justine |
 | `Source/dsp/KrangEngine.h` | Kopplar ihop kammare, effekter, DC-spärr och limiter | Justine |
 | `Source/Parameters.h` | Parameterträdet – ID:n får aldrig döpas om | Justine |
 | `Source/ui/KrangStyle.h` | Krang-stil: LookAndFeel, ratt, fader, modulram, kopparrör, VFD-display, VU-mätare, frontpanel | Philip |

@@ -1,5 +1,5 @@
 // KrangEngine – kopplar ihop kammare och Ångledningen:
-// kammare -> Krangdistortion -> Ångfilter -> DC-spärr/master -> Katedralreverb (stereo) -> limiter.
+// kammare -> Kaosmotorn -> Krangdistortion -> Ångfilter -> Bandmaskin -> Ekokammare -> DC-spärr/master -> Katedralreverb (stereo) -> limiter.
 // Delas av pluginet och KrangRender så att lyssningstest låter exakt som pluginet.
 //
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
@@ -9,16 +9,20 @@
 #include "Hammarverket.h"
 #include "Bordunorgeln.h"
 #include "Spolslingan.h"
+#include "Stalpiano.h"
+#include "Klockgjuteriet.h"
 #include "Slingan.h"
 #include "KrangDistortion.h"
 #include "Stegverket.h"
 #include "Angledningen.h"
+#include "Bandmaskin.h"
+#include "Kaosmotorn.h"
 
 namespace krang
 {
 
 // Vilken kammare (ljudmotor) som spelar. Fler tillkommer i fas 3.
-enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan };
+enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan, Stalpiano, Klockgjuteriet };
 
 struct EngineParams
 {
@@ -27,12 +31,18 @@ struct EngineParams
     HammarverketParams hammarverket;
     BordunorgelnParams bordunorgeln;
     SpolslinganParams spolslingan;
+    StalpianoParams stalpiano;
+    KlockgjuterietParams klockor;
     SlinganSettings slingan;
     StegverketSettings stegverket;
     DistortionParams distortion;
     FxFilterParams filter;
+    KaosParams kaos;
+    TapeParams tape;
+    EchoParams echo;
     ReverbParams reverb;
     float masterDb = 0.0f;
+    double bpm = 120.0;        // DAW:ens tempo när den spelar, annars Stegverkets; används av synkat eko
     float krangspaken = 0.0f; // 0..1, redan inräknad i fälten ovan av applyKrangspaken()
 };
 
@@ -68,6 +78,26 @@ inline void applyKrangspaken (EngineParams& e, float k)
     e.spolslingan.grain  = toward (e.spolslingan.grain, 0.6f, 0.8f);
     e.spolslingan.spread = toward (e.spolslingan.spread, 1.0f);
 
+    e.stalpiano.rust        = toward (e.stalpiano.rust, 0.7f, 0.8f);
+    e.stalpiano.detuneCents = e.stalpiano.detuneCents + 8.0f * k;   // strängarna glider isär
+    e.stalpiano.stiffness   = toward (e.stalpiano.stiffness, 1.0f, 0.5f);
+
+    e.klockor.crack     = toward (e.klockor.crack, 0.7f, 0.7f);  // klockan spricker
+    e.klockor.beatCents = e.klockor.beatCents + 10.0f * k;
+
+    e.tape.wow     = toward (e.tape.wow, 0.7f, 0.6f);
+    e.tape.age     = toward (e.tape.age, 0.8f, 0.6f);
+    e.tape.dropout = toward (e.tape.dropout, 0.5f, 0.5f);
+    if (e.echo.mix > 0.001f)
+        e.echo.feedback = toward (e.echo.feedback, 1.05f, 0.5f); // ekot börjar självsvänga
+
+    // Kaosmotorn vaknar: maskinen börjar hacka även om kaoset var avstängt.
+    auto& ka = e.kaos;
+    ka.amount  = juce::jmax (ka.amount, toward (ka.amount, 0.4f, 0.8f));
+    ka.drift   = juce::jmax (ka.drift, 0.5f * k);
+    if (ka.stutter + ka.reverse + ka.crush < 0.3f)
+        ka.stutter = juce::jmax (ka.stutter, 0.6f * k);
+
     e.reverb.mix  = juce::jmax (e.reverb.mix, toward (e.reverb.mix, 0.45f, 0.6f));
     e.reverb.dark = toward (e.reverb.dark, 0.8f, 0.5f);
 }
@@ -81,8 +111,13 @@ public:
         hammarverket.prepare (sampleRate, maxBlockSize);
         bordunorgeln.prepare (sampleRate, maxBlockSize);
         spolslingan.prepare (sampleRate, maxBlockSize);
+        stalpiano.prepare (sampleRate, maxBlockSize);
+        klockor.prepare (sampleRate, maxBlockSize);
         distortion.prepare (sampleRate, maxBlockSize);
         filter.prepare (sampleRate, maxBlockSize);
+        kaos.prepare (sampleRate, maxBlockSize);
+        tape.prepare (sampleRate, maxBlockSize);
+        echo.prepare (sampleRate, maxBlockSize);
         reverb.prepare (sampleRate, maxBlockSize);
         limiter.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
         limiter.setThreshold (-0.5f);
@@ -97,8 +132,13 @@ public:
         hammarverket.reset();
         bordunorgeln.reset();
         spolslingan.reset();
+        stalpiano.reset();
+        klockor.reset();
         distortion.reset();
         filter.reset();
+        kaos.reset();
+        tape.reset();
+        echo.reset();
         reverb.reset();
         limiter.reset();
         dcX = dcY = 0.0f;
@@ -113,14 +153,21 @@ public:
             hammarverket.allNotesOff();
             bordunorgeln.allNotesOff();
             spolslingan.allNotesOff();
+            stalpiano.allNotesOff();
+            klockor.allNotesOff();
             chamber = p.chamber;
         }
         basmalen.setParams (p.basmalen);
         hammarverket.setParams (p.hammarverket);
         bordunorgeln.setParams (p.bordunorgeln);
         spolslingan.setParams (p.spolslingan);
+        stalpiano.setParams (p.stalpiano);
+        klockor.setParams (p.klockor);
         distortion.setParams (p.distortion);
         filter.setParams (p.filter);
+        kaos.setParams (p.kaos, p.bpm);
+        tape.setParams (p.tape);
+        echo.setParams (p.echo, p.bpm);
         reverb.setParams (p.reverb);
         masterGain = juce::Decibels::decibelsToGain (p.masterDb);
     }
@@ -134,6 +181,8 @@ public:
                 case Chamber::Hammarverket: hammarverket.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Bordunorgeln: bordunorgeln.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Spolslingan:  spolslingan.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Stalpiano:    stalpiano.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Klockgjuteriet: klockor.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Basmalen:     basmalen.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
             }
         }
@@ -144,6 +193,8 @@ public:
                 case Chamber::Hammarverket: hammarverket.noteOff (m.getNoteNumber()); break;
                 case Chamber::Bordunorgeln: bordunorgeln.noteOff (m.getNoteNumber()); break;
                 case Chamber::Spolslingan:  spolslingan.noteOff (m.getNoteNumber()); break;
+                case Chamber::Stalpiano:    stalpiano.noteOff (m.getNoteNumber()); break;
+                case Chamber::Klockgjuteriet: klockor.noteOff (m.getNoteNumber()); break;
                 case Chamber::Basmalen:     basmalen.noteOff (m.getNoteNumber()); break;
             }
         }
@@ -153,6 +204,12 @@ public:
             hammarverket.allNotesOff();
             bordunorgeln.allNotesOff();
             spolslingan.allNotesOff();
+            stalpiano.allNotesOff();
+            klockor.allNotesOff();
+        }
+        else if (m.isSustainPedalOn() || m.isSustainPedalOff())
+        {
+            stalpiano.setSustain (m.isSustainPedalOn()); // högerpedalen: bara Stålpianot har dämpare
         }
         else if (m.isPitchWheel())
         {
@@ -168,10 +225,15 @@ public:
             case Chamber::Hammarverket: hammarverket.render (left, numSamples); break;
             case Chamber::Bordunorgeln: bordunorgeln.render (left, numSamples); break;
             case Chamber::Spolslingan:  spolslingan.render (left, numSamples); break;
+            case Chamber::Stalpiano:    stalpiano.render (left, numSamples); break;
+            case Chamber::Klockgjuteriet: klockor.render (left, numSamples); break;
             case Chamber::Basmalen:     basmalen.render (left, numSamples); break;
         }
+        kaos.process (left, numSamples);
         distortion.process (left, numSamples);
         filter.process (left, numSamples);
+        tape.process (left, numSamples);
+        echo.process (left, numSamples);
 
         for (int i = 0; i < numSamples; ++i)
         {
@@ -193,6 +255,8 @@ public:
         juce::FloatVectorOperations::clip (right, right, -ceiling, ceiling, numSamples);
     }
 
+    juce::uint32 getKaosEventCount() const { return kaos.getEventCount(); }
+
     int getLatencyInSamples() const { return distortion.getLatencyInSamples(); }
 
 private:
@@ -201,8 +265,13 @@ private:
     Hammarverket hammarverket;
     Bordunorgeln bordunorgeln;
     Spolslingan spolslingan;
+    Stalpiano stalpiano;
+    Klockgjuteriet klockor;
     KrangDistortion distortion;
     AngFilter filter;
+    Kaosmotorn kaos;
+    Bandmaskin tape;
+    Ekokammare echo;
     Katedralreverb reverb;
     juce::dsp::Limiter<float> limiter;
     float masterGain = 1.0f;

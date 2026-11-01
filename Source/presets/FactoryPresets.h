@@ -33,6 +33,13 @@ namespace mode
     constexpr float ror = 0, fuzz = 1, vikning = 2, bitkross = 3;
     constexpr float filterAv = 0, lagpass = 1, hogpass = 2, formant = 3, kam = 4;
     constexpr float hall = 0, platta = 1, rostigTank = 2;
+    constexpr float stalpiano = 4;
+    constexpr float pianoLage = 0, hackbrade = 1, preparerat = 2;
+    constexpr float klockgjuteriet = 5;
+    constexpr float kyrkklocka = 0, skalla = 1, gong = 2, rals = 3, skalklocka = 4;
+    constexpr float stal = 0, massing = 1, koppar = 2, jarn = 3, silke = 4, djurhud = 5;
+    constexpr float kaosFri = 0, kaos4 = 1, kaos8 = 2, kaos16 = 3, kaos32 = 4;
+    constexpr float ekoFri = 0, eko4 = 1, eko8 = 2, eko8p = 3, eko16 = 4, eko4T = 5;
     constexpr float vokalA = 0.0f, vokalE = 0.25f, vokalI = 0.5f, vokalO = 0.75f, vokalU = 1.0f;
 }
 
@@ -80,6 +87,20 @@ inline const std::vector<FactoryPreset>& factoryPresets()
           { { "chamber", basmalen }, { "distOut", 0.0f }, { "master", 2.0f }, { "osc1Level", 0.6f }, { "osc2Level", 0.3f }, { "cutoff", 800.0f },
             { "resonance", 0.25f }, { "envAmount", 1.5f }, { "distMix", 0.15f }, { "distDrive", 10.0f },
             { "rvbMode", platta }, { "rvbMix", 0.25f } }, {} },
+
+        { "Slitet band", "Bas",
+          { { "chamber", basmalen }, { "osc1Level", 0.8f }, { "osc2Level", 0.4f }, { "osc2Fine", 7.0f }, { "subLevel", 0.6f },
+            { "cutoff", 420.0f }, { "resonance", 0.4f }, { "envAmount", 3.0f }, { "fltD", 0.3f }, { "fltS", 0.2f },
+            { "distMode", ror }, { "distDrive", 16.0f },
+            { "tpWow", 0.45f }, { "tpFlutter", 0.35f }, { "tpAge", 0.6f },
+            { "ecSync", eko8p }, { "ecFeedback", 0.35f }, { "ecDark", 0.6f }, { "ecMix", 0.25f } }, {} },
+
+        { "Hackande maskin", "Bas",
+          { { "chamber", basmalen }, { "osc1Level", 0.9f }, { "osc2Level", 0.5f }, { "osc2Semi", 12.0f }, { "subLevel", 0.6f },
+            { "cutoff", 500.0f }, { "resonance", 0.55f }, { "envAmount", 3.5f }, { "fltD", 0.2f }, { "fltS", 0.1f },
+            { "distMode", fuzz }, { "distDrive", 18.0f },
+            { "kaAmount", 0.35f }, { "kaSync", kaos16 }, { "kaDrift", 0.2f }, { "kaStutter", 0.8f }, { "kaReverse", 0.2f },
+            { "kaCrush", 0.4f } }, {} },
 
         // ------------------------------------------------------------------ Drön och folk
         { "Nyckelharpsdrön", "Drön och folk",
@@ -131,6 +152,13 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "boDrift", 0.8f }, { "distMode", bitkross }, { "distBits", 6.0f }, { "distDown", 3.0f }, { "distMix", 0.5f },
             { "rvbMode", rostigTank }, { "rvbMix", 0.35f } }, {} },
 
+        { "Gammal rulle", "Drön och folk",
+          { { "chamber", bordunorgeln }, { "boTimbre", 0.4f }, { "boDrone", 0.5f }, { "boSymp", 0.5f },
+            { "distMix", 0.2f }, { "distDrive", 8.0f },
+            { "tpWow", 0.8f }, { "tpFlutter", 0.5f }, { "tpAge", 0.85f }, { "tpDropout", 0.5f },
+            { "ecSync", ekoFri }, { "ecTime", 620.0f }, { "ecFeedback", 0.55f }, { "ecDark", 0.75f }, { "ecMix", 0.3f },
+            { "rvbMode", hall }, { "rvbMix", 0.25f } }, {} },
+
         // ------------------------------------------------------------------ Leads och slingor
         { "Spolslingan", "Leads och slingor", { { "chamber", spolslingan }, { "distMix", 0.3f }, { "rvbMix", 0.2f } }, {} },
 
@@ -157,6 +185,91 @@ inline const std::vector<FactoryPreset>& factoryPresets()
           { { "chamber", spolslingan }, { "spArp", arpSlump }, { "spArpRate", takt16T }, { "spArpOct", 3.0f },
             { "spRatio", 1.41f }, { "spIndex", 6.0f }, { "spDecay", 0.2f }, { "spRelease", 0.15f }, { "spGrain", 0.3f },
             { "seqTempo", 90.0f }, { "distMix", 0.5f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        { "Ekon från ödemarken", "Leads och slingor",
+          { { "chamber", spolslingan }, { "spArp", arpUppNed }, { "spArpRate", takt8 }, { "spArpOct", 2.0f },
+            { "spRatio", 3.0f }, { "spIndex", 3.5f }, { "spDecay", 0.2f }, { "spRelease", 0.15f }, { "seqTempo", 96.0f },
+            { "distDrive", 8.0f }, { "tpWow", 0.25f }, { "tpAge", 0.4f },
+            { "ecSync", eko8p }, { "ecFeedback", 0.7f }, { "ecDark", 0.55f }, { "ecMix", 0.4f },
+            { "rvbMode", platta }, { "rvbMix", 0.15f } }, {} },
+
+        { "Radion i bunkern", "Leads och slingor",
+          { { "chamber", spolslingan }, { "spRatio", 1.5f }, { "spIndex", 4.0f }, { "spDecay", 0.5f }, { "spHarp", 0.3f },
+            { "spGrain", 0.25f }, { "distMode", bitkross }, { "distBits", 7.0f }, { "distMix", 0.4f },
+            { "kaAmount", 0.45f }, { "kaSync", kaos8 }, { "kaDrift", 0.6f }, { "kaStutter", 0.4f }, { "kaReverse", 0.6f },
+            { "kaCrush", 0.3f }, { "tpAge", 0.5f }, { "rvbMode", rostigTank }, { "rvbMix", 0.25f } }, {} },
+
+        // ------------------------------------------------------------------ Stålpiano
+        { "Init Stålpiano", "Stålpiano",
+          { { "chamber", stalpiano }, { "distMix", 0.15f }, { "distDrive", 8.0f }, { "rvbMix", 0.2f } }, {} },
+
+        { "Missionshuset", "Stålpiano",
+          { { "chamber", stalpiano }, { "stHard", 0.4f }, { "stDetune", 7.0f }, { "stRust", 0.3f }, { "stBody", 0.6f },
+            { "distMix", 0.2f }, { "distDrive", 10.0f }, { "tpWow", 0.25f }, { "tpAge", 0.45f },
+            { "rvbMode", hall }, { "rvbMix", 0.35f }, { "rvbSize", 0.8f } }, {} },
+
+        { "Hackbrädet", "Stålpiano",
+          { { "chamber", stalpiano }, { "master", 1.5f }, { "stMode", hackbrade }, { "stHard", 0.7f }, { "stPos", 0.1f }, { "stDetune", 5.0f },
+            { "stDecay", 6.0f }, { "stBody", 0.55f }, { "distMix", 0.1f }, { "rvbMode", platta }, { "rvbMix", 0.2f } }, {} },
+
+        { "Skruvat piano", "Stålpiano",
+          { { "chamber", stalpiano }, { "stMode", preparerat }, { "stHard", 0.6f }, { "stStiff", 0.6f }, { "stRust", 0.2f },
+            { "distMode", ror }, { "distDrive", 12.0f }, { "distMix", 0.3f },
+            { "rvbMode", rostigTank }, { "rvbMix", 0.25f } }, {} },
+
+        { "Stålregn", "Stålpiano",
+          { { "chamber", stalpiano }, { "stHard", 0.9f }, { "stStiff", 0.9f }, { "stPos", 0.08f }, { "stDecay", 12.0f },
+            { "distMix", 0.1f }, { "ecSync", eko8p }, { "ecFeedback", 0.5f }, { "ecDark", 0.5f }, { "ecMix", 0.3f },
+            { "kaAmount", 0.15f }, { "kaStutter", 0.2f }, { "kaReverse", 0.8f }, { "kaCrush", 0.0f }, { "kaDrift", 0.1f },
+            { "rvbMode", hall }, { "rvbMix", 0.4f } }, {} },
+
+        { "Kedjepianot", "Stålpiano",
+          { { "chamber", stalpiano }, { "stMode", preparerat }, { "stRust", 0.8f }, { "stDetune", 10.0f }, { "stDamper", 0.4f },
+            { "distMode", bitkross }, { "distBits", 6.0f }, { "distDown", 4.0f }, { "distMix", 0.4f },
+            { "kaAmount", 0.25f }, { "kaStutter", 0.8f }, { "kaReverse", 0.2f }, { "kaCrush", 0.3f } }, {} },
+
+        { "Hudharpan", "Stålpiano",
+          { { "chamber", stalpiano }, { "master", 3.0f }, { "stMaterial", djurhud }, { "stMode", hackbrade }, { "stHard", 0.6f },
+            { "stDecay", 16.0f }, { "stBody", 0.8f }, { "stDetune", 6.0f }, { "distMix", 0.15f },
+            { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        { "Silkesqin", "Stålpiano",
+          { { "chamber", stalpiano }, { "master", 2.0f }, { "stMaterial", silke }, { "stHard", 0.3f }, { "stPos", 0.2f }, { "stDecay", 14.0f },
+            { "stDamper", 0.6f }, { "stBody", 0.6f }, { "distMix", 0.0f }, { "ecSync", eko8p }, { "ecMix", 0.2f },
+            { "ecFeedback", 0.35f }, { "rvbMode", platta }, { "rvbMix", 0.3f } }, {} },
+
+        { "Kopparharpan", "Stålpiano",
+          { { "chamber", stalpiano }, { "stMaterial", koppar }, { "stMode", hackbrade }, { "stHard", 0.55f },
+            { "stDetune", 4.0f }, { "distMix", 0.1f }, { "tpAge", 0.3f }, { "rvbMode", hall }, { "rvbMix", 0.25f } }, {} },
+
+        // ------------------------------------------------------------------ Klockor
+        { "Init Klockgjuteriet", "Klockor",
+          { { "chamber", klockgjuteriet }, { "distMix", 0.1f }, { "distDrive", 8.0f }, { "rvbMix", 0.25f } }, {} },
+
+        { "Kyrkklockan i dimman", "Klockor",
+          { { "chamber", klockgjuteriet }, { "klType", kyrkklocka }, { "klDecay", 18.0f }, { "klHum", 0.8f },
+            { "distMix", 0.0f }, { "tpAge", 0.25f }, { "tpWow", 0.15f }, { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbSize", 0.9f } }, {} },
+
+        { "Fäbodskällan", "Klockor",
+          { { "chamber", klockgjuteriet }, { "klType", skalla }, { "klHard", 0.7f }, { "klDecay", 6.0f }, { "master", 2.0f }, { "klBeat", 8.0f },
+            { "distMix", 0.1f }, { "rvbMode", platta }, { "rvbMix", 0.15f } }, {} },
+
+        { "Operagongen", "Klockor",
+          { { "chamber", klockgjuteriet }, { "klType", gong }, { "klSweep", 0.6f }, { "klHard", 0.4f }, { "klDecay", 14.0f },
+            { "distMix", 0.05f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        { "Rälsen i tunneln", "Klockor",
+          { { "chamber", klockgjuteriet }, { "klType", rals }, { "klHard", 0.9f }, { "klDecay", 12.0f },
+            { "distMix", 0.15f }, { "ecSync", 1.0f }, { "ecFeedback", 0.5f }, { "ecDark", 0.6f }, { "ecMix", 0.3f },
+            { "rvbMode", rostigTank }, { "rvbMix", 0.3f } }, {} },
+
+        { "Sprucken kyrkklocka", "Klockor",
+          { { "chamber", klockgjuteriet }, { "klType", kyrkklocka }, { "klCrack", 0.6f }, { "klBeat", 12.0f },
+            { "distMode", bitkross }, { "distBits", 7.0f }, { "distMix", 0.3f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        { "Sjungande skålen", "Klockor",
+          { { "chamber", klockgjuteriet }, { "klType", skalklocka }, { "klHard", 0.2f }, { "klBeat", 8.0f }, { "klDecay", 30.0f },
+            { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
 
         // ------------------------------------------------------------------ Trummor
         { "Init Hammarverket", "Trummor", { { "chamber", hammarverket } },
@@ -211,6 +324,21 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "hv0Level", 1.0f }, { "hv2Level", 1.0f }, { "fxMode", hogpass }, { "fxCutoff", 90.0f }, { "fxReso", 0.4f }, { "rvbMode", platta }, { "rvbMix", 0.2f } },
           { "2000001000200010", "0000000000000000", "0000100000001000", "0000000000000000",
             "0000000000000000", "2121212121212101", "0000000000000010", "0000000000000000" } },
+
+        { "Ekande smedja", "Trummor",
+          { { "chamber", hammarverket }, { "seqTempo", 100.0f }, { "distDrive", 10.0f },
+            { "tpAge", 0.5f }, { "tpFlutter", 0.3f },
+            { "ecSync", eko16 }, { "ecFeedback", 0.5f }, { "ecDark", 0.65f }, { "ecMix", 0.3f } },
+          { "2000000020100000", "0000000000000000", "0000200000002000", "0000000000000000",
+            "0000000000000000", "1010101010101010", "0000000000000000", "0000000000000000" } },
+
+        { "Trasig trummaskin", "Trummor",
+          { { "chamber", hammarverket }, { "seqTempo", 118.0f }, { "distMode", bitkross }, { "distBits", 6.0f },
+            { "distMix", 0.5f }, { "hvRost", 0.4f },
+            { "kaAmount", 0.4f }, { "kaSync", kaos16 }, { "kaDrift", 0.0f }, { "kaStutter", 1.0f }, { "kaReverse", 0.4f },
+            { "kaCrush", 0.5f } },
+          { "2000001020000000", "0000000000000010", "0000200000002000", "0000000000000000",
+            "0000000000000000", "1011101110111011", "0000000000000000", "0000001000000100" } },
     };
     return list;
 }

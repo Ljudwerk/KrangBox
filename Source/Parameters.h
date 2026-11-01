@@ -70,6 +70,45 @@ namespace id
     inline constexpr auto fxReso      = "fxReso";
     inline constexpr auto fxVowel     = "fxVowel";
 
+    inline constexpr auto stMode      = "stMode";
+    inline constexpr auto stMaterial  = "stMaterial";
+    inline constexpr auto stHard      = "stHard";
+    inline constexpr auto stPos       = "stPos";
+    inline constexpr auto stStiff     = "stStiff";
+    inline constexpr auto stDetune    = "stDetune";
+    inline constexpr auto stDecay     = "stDecay";
+    inline constexpr auto stDamper    = "stDamper";
+    inline constexpr auto stBody      = "stBody";
+    inline constexpr auto stRust      = "stRust";
+
+    inline constexpr auto klType      = "klType";
+    inline constexpr auto klHard      = "klHard";
+    inline constexpr auto klDecay     = "klDecay";
+    inline constexpr auto klRelease   = "klRelease";
+    inline constexpr auto klBeat      = "klBeat";
+    inline constexpr auto klCrack     = "klCrack";
+    inline constexpr auto klHum       = "klHum";
+    inline constexpr auto klSweep     = "klSweep";
+
+    inline constexpr auto kaAmount    = "kaAmount";
+    inline constexpr auto kaSync      = "kaSync";
+    inline constexpr auto kaRate      = "kaRate";
+    inline constexpr auto kaDrift     = "kaDrift";
+    inline constexpr auto kaStutter   = "kaStutter";
+    inline constexpr auto kaReverse   = "kaReverse";
+    inline constexpr auto kaCrush     = "kaCrush";
+
+    inline constexpr auto tpWow       = "tpWow";
+    inline constexpr auto tpFlutter   = "tpFlutter";
+    inline constexpr auto tpAge       = "tpAge";
+    inline constexpr auto tpDropout   = "tpDropout";
+
+    inline constexpr auto ecSync      = "ecSync";
+    inline constexpr auto ecTime      = "ecTime";
+    inline constexpr auto ecFeedback  = "ecFeedback";
+    inline constexpr auto ecDark      = "ecDark";
+    inline constexpr auto ecMix       = "ecMix";
+
     inline constexpr auto rvbMode     = "rvbMode";
     inline constexpr auto rvbMix      = "rvbMix";
     inline constexpr auto rvbSize     = "rvbSize";
@@ -113,7 +152,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     // Kammare
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::chamber, 1 }, "Kammare",
-                                                         StringArray { String::fromUTF8 ("Basmålen"), "Hammarverket", "Bordunorgeln", "Spolslingan" }, 0));
+                                                         StringArray { String::fromUTF8 ("Basmålen"), "Hammarverket", "Bordunorgeln", "Spolslingan", String::fromUTF8 ("Stålpiano"), "Klockgjuteriet" }, 0));
 
     // Basmålen – oscillatorer
     add (id::osc1Level, "Osc 1 Sågtand", { 0.0f, 1.0f }, 0.8f);
@@ -161,6 +200,95 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                           static const char* vowels[] = { "A", "E", "I", "O", "U" };
                                           return String (vowels[jlimit (0, 4, roundToInt (v * 4.0f))]);
                                       })));
+
+    // Stålpiano
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::stMode, 1 }, String::fromUTF8 ("Stålpianoläge"),
+                                                         StringArray { "Piano", String::fromUTF8 ("Hackbräde"), "Preparerat" }, 0));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::stMaterial, 1 }, "Strängmaterial",
+                                                         StringArray { String::fromUTF8 ("Stål"), String::fromUTF8 ("Mässing"), "Koppar",
+                                                                       String::fromUTF8 ("Järn"), "Silke", "Djurhud" }, 0));
+    add (id::stHard,   "Hammarhårdhet", { 0.0f, 1.0f }, 0.5f);
+    p.push_back (std::make_unique<P> (ParameterID { id::stPos, 1 }, "Anslagspunkt", NormalisableRange<float> (0.05f, 0.5f), 0.12f,
+                                      AudioParameterFloatAttributes().withLabel ("%")
+                                          .withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)); })));
+    add (id::stStiff,  "Styvhet",       { 0.0f, 1.0f }, 0.3f);
+    add (id::stDetune, "Svävning",      { 0.0f, 20.0f }, 3.0f, "ct");
+    {
+        NormalisableRange<float> d (0.5f, 30.0f); d.setSkewForCentre (6.0f);
+        p.push_back (std::make_unique<P> (ParameterID { id::stDecay, 1 }, "Klingtid", d, 8.0f,
+                                          AudioParameterFloatAttributes().withLabel ("s")
+                                              .withStringFromValueFunction ([] (float v, int) { return String (v, 1); })));
+        NormalisableRange<float> m (0.03f, 2.0f); m.setSkewForCentre (0.25f);
+        p.push_back (std::make_unique<P> (ParameterID { id::stDamper, 1 }, String::fromUTF8 ("Dämpare"), m, 0.15f,
+                                          AudioParameterFloatAttributes().withLabel ("s")
+                                              .withStringFromValueFunction ([] (float v, int) { return String (v, 2); })));
+    }
+    add (id::stBody,   "Klangbotten",   { 0.0f, 1.0f }, 0.4f);
+    add (id::stRust,   "Pianorost",     { 0.0f, 1.0f }, 0.0f);
+
+    // Klockgjuteriet
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::klType, 1 }, "Klocktyp",
+                                                         StringArray { "Kyrkklocka", String::fromUTF8 ("Skälla"), "Gong", String::fromUTF8 ("Räls"),
+                                                                       String::fromUTF8 ("Skålklocka") }, 0));
+    add (id::klHard, "Kläpp", { 0.0f, 1.0f }, 0.5f);
+    {
+        NormalisableRange<float> d (0.5f, 40.0f); d.setSkewForCentre (8.0f);
+        p.push_back (std::make_unique<P> (ParameterID { id::klDecay, 1 }, "Klockans klingtid", d, 10.0f,
+                                          AudioParameterFloatAttributes().withLabel ("s")
+                                              .withStringFromValueFunction ([] (float v, int) { return String (v, 1); })));
+        NormalisableRange<float> r (0.05f, 40.0f); r.setSkewForCentre (2.0f);
+        // Ingen enhet i etiketten: i botten står det "Klingar ut" i stället för en tid.
+        p.push_back (std::make_unique<P> (ParameterID { id::klRelease, 1 }, String::fromUTF8 ("Släpp"), r, 40.0f,
+                                          AudioParameterFloatAttributes()
+                                              .withStringFromValueFunction ([] (float v, int)
+                                              {
+                                                  return v >= 39.0f ? String::fromUTF8 ("Klingar ut") : String (v, v < 1.0f ? 2 : 1) + " s";
+                                              })));
+    }
+    add (id::klBeat,  "Klocksvävning", { 0.0f, 30.0f }, 4.0f, "ct");
+    add (id::klCrack, "Spricka", { 0.0f, 1.0f }, 0.0f);
+    add (id::klHum,   "Brumton", { 0.0f, 1.0f }, 0.6f);
+    p.push_back (std::make_unique<P> (ParameterID { id::klSweep, 1 }, "Svep", NormalisableRange<float> (-1.0f, 1.0f), 0.0f,
+                                      AudioParameterFloatAttributes().withLabel ("ct")
+                                          .withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 300.0f)); })));
+
+    // Kaosmotorn
+    p.push_back (std::make_unique<P> (ParameterID { id::kaAmount, 1 }, "Kaos", NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+                                      AudioParameterFloatAttributes().withLabel ("%")
+                                          .withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)); })));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::kaSync, 1 }, "Kaostakt",
+                                                         StringArray { "Fri", "1/4", "1/8", "1/16", "1/32" }, 3));
+    {
+        NormalisableRange<float> r (0.25f, 32.0f); r.setSkewForCentre (4.0f);
+        p.push_back (std::make_unique<P> (ParameterID { id::kaRate, 1 }, "Kaosfrekvens", r, 4.0f,
+                                          AudioParameterFloatAttributes().withLabel ("Hz")
+                                              .withStringFromValueFunction ([] (float v, int) { return String (v, v < 10.0f ? 1 : 0); })));
+    }
+    add (id::kaDrift,   "Slumpdrift", { 0.0f, 1.0f }, 0.3f);
+    add (id::kaStutter, "Hack",       { 0.0f, 1.0f }, 0.6f);
+    add (id::kaReverse, "Baklänges",  { 0.0f, 1.0f }, 0.3f);
+    add (id::kaCrush,   "Söndring",   { 0.0f, 1.0f }, 0.3f);
+
+    // Bandmaskinen
+    add (id::tpWow,     "Wow",     { 0.0f, 1.0f }, 0.0f);
+    add (id::tpFlutter, "Flutter", { 0.0f, 1.0f }, 0.0f);
+    add (id::tpAge,     "Bandålder", { 0.0f, 1.0f }, 0.0f);
+    add (id::tpDropout, "Avbrott", { 0.0f, 1.0f }, 0.0f);
+
+    // Ekokammaren
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::ecSync, 1 }, "Ekotakt",
+                                                         StringArray { "Fri", "1/4", "1/8", "1/8 punkt.", "1/16", "1/4 triol" }, 2));
+    {
+        NormalisableRange<float> t (20.0f, 1500.0f); t.setSkewForCentre (300.0f);
+        add (id::ecTime, "Ekotid", t, 350.0f, "ms");
+    }
+    p.push_back (std::make_unique<P> (ParameterID { id::ecFeedback, 1 }, String::fromUTF8 ("Återkoppling"), NormalisableRange<float> (0.0f, 1.1f), 0.4f,
+                                      AudioParameterFloatAttributes().withLabel ("%")
+                                          .withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)); })));
+    add (id::ecDark, "Ekomörker", { 0.0f, 1.0f }, 0.4f);
+    p.push_back (std::make_unique<P> (ParameterID { id::ecMix, 1 }, "Ekomix", NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+                                      AudioParameterFloatAttributes().withLabel ("%")
+                                          .withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)); })));
 
     // Katedralreverb
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::rvbMode, 1 }, "Katedralreverb",
@@ -307,6 +435,47 @@ public:
         e.filter.resonance = v (id::fxReso);
         e.filter.vowel     = v (id::fxVowel);
 
+        auto& st = e.stalpiano;
+        st.mode        = (StalMode) (int) v (id::stMode);
+        st.material    = (StalMaterial) (int) v (id::stMaterial);
+        st.hardness    = v (id::stHard);
+        st.strikePos   = v (id::stPos);
+        st.stiffness   = v (id::stStiff);
+        st.detuneCents = v (id::stDetune);
+        st.decaySec    = v (id::stDecay);
+        st.damperSec   = v (id::stDamper);
+        st.body        = v (id::stBody);
+        st.rust        = v (id::stRust);
+
+        auto& kl = e.klockor;
+        kl.type       = (BellType) (int) v (id::klType);
+        kl.hardness   = v (id::klHard);
+        kl.decaySec   = v (id::klDecay);
+        kl.releaseSec = v (id::klRelease);
+        kl.beatCents  = v (id::klBeat);
+        kl.crack      = v (id::klCrack);
+        kl.hum        = v (id::klHum);
+        kl.sweep      = v (id::klSweep);
+
+        e.kaos.amount  = v (id::kaAmount);
+        e.kaos.sync    = (int) v (id::kaSync);
+        e.kaos.rateHz  = v (id::kaRate);
+        e.kaos.drift   = v (id::kaDrift);
+        e.kaos.stutter = v (id::kaStutter);
+        e.kaos.reverse = v (id::kaReverse);
+        e.kaos.crush   = v (id::kaCrush);
+
+        e.tape.wow     = v (id::tpWow);
+        e.tape.flutter = v (id::tpFlutter);
+        e.tape.age     = v (id::tpAge);
+        e.tape.dropout = v (id::tpDropout);
+
+        e.echo.sync     = (int) v (id::ecSync);
+        e.echo.timeMs   = v (id::ecTime);
+        e.echo.feedback = v (id::ecFeedback);
+        e.echo.dark     = v (id::ecDark);
+        e.echo.mix      = v (id::ecMix);
+
         e.reverb.mode = (ReverbMode) (int) v (id::rvbMode);
         e.reverb.mix  = v (id::rvbMix);
         e.reverb.size = v (id::rvbSize);
@@ -343,6 +512,7 @@ public:
         e.stegverket.swing  = v (id::seqSwing);
         e.stegverket.length = 16 * (1 + (int) v (id::seqLength));
         e.slingan.tempo = e.stegverket.tempo; // samma tempo som Stegverket när DAW:en inte spelar
+        e.bpm = e.stegverket.tempo;           // processorn byter till DAW:ens tempo när den spelar
         e.hammarverket.rost = v (id::hvRost);
         for (size_t k = 0; k < (size_t) numDrums; ++k)
         {

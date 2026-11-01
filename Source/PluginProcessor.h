@@ -1,6 +1,9 @@
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
 #pragma once
 
+#include <array>
+#include <atomic>
+
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "Parameters.h"
@@ -45,6 +48,29 @@ public:
 
     // Senaste toppnivå på utgången, läses (och nollställs) av mätaren i gränssnittet.
     std::atomic<float> outputPeak { 0.0f };
+
+    // Kaosskopet: de senaste utgångssamplen (vänster kanal), skrivna av ljudtråden och lästa av oscilloskopet.
+    struct ScopeTap
+    {
+        static constexpr int size = 4096;
+        std::array<std::atomic<float>, size> samples {};
+        std::atomic<int> writeIndex { 0 };
+
+        void push (const float* data, int n)
+        {
+            int w = writeIndex.load (std::memory_order_relaxed);
+            for (int i = 0; i < n; ++i)
+            {
+                samples[(size_t) w].store (data[i], std::memory_order_relaxed);
+                w = (w + 1) & (size - 1);
+            }
+            writeIndex.store (w, std::memory_order_release);
+        }
+    };
+    ScopeTap scope;
+
+    // Antal händelser i Kaosmotorn; kaoslampan blinkar när det ändras.
+    std::atomic<juce::uint32> kaosEvents { 0 };
 
     // Det virtuella keyboardet i gränssnittet skriver hit; noterna blandas in i MIDI-flödet.
     juce::MidiKeyboardState keyboardState;

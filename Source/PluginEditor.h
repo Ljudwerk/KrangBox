@@ -1,4 +1,4 @@
-// Krang-panelen (fas 2): hela gränssnittet ritas i en fast designstorlek (1200 × 850)
+// Krang-panelen (fas 2): hela gränssnittet ritas i en fast designstorlek (1200 × 970)
 // och skalas proportionellt när fönstret ändrar storlek (60–160 %).
 //
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
@@ -19,7 +19,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    static constexpr int designWidth = 1200, designHeight = 850;
+    static constexpr int designWidth = 1200, designHeight = 970;
 
 private:
     void timerCallback() override;
@@ -42,7 +42,10 @@ private:
     krang::ui::HammarverketPanel hammarverket;
     krang::ui::BordunorgelnPanel bordunorgeln;
     krang::ui::SpolslinganPanel spolslingan;
+    krang::ui::StalpianoPanel stalpiano;
+    krang::ui::KlockgjuterietPanel klockor;
     krang::ui::AngledningenPanel angledningen;
+    krang::ui::KaosPanel kaos;
 
     // Virtuellt keyboard för att provspela utan MIDI-keyboard.
     juce::MidiKeyboardComponent keyboard;
@@ -58,6 +61,8 @@ private:
     std::unique_ptr<juce::AlertWindow> saveDialog;
     juce::String lastParam { "distDrive" }, shownPreset;
     int shownChamber = -1;
+    juce::uint32 shownKaosEvents = 0;
+    std::array<float, KrangBoxProcessor::ScopeTap::size> scopeCopy {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KrangBoxEditor)
 };

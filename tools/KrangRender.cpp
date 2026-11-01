@@ -374,7 +374,8 @@ int main (int argc, char* argv[])
                 }
                 total = seqTotal + (int) sr * 2;
             }
-            else if (p.chamber == krang::Chamber::Bordunorgeln)
+            else if (p.chamber == krang::Chamber::Bordunorgeln || p.chamber == krang::Chamber::Stalpiano
+                     || p.chamber == krang::Chamber::Klockgjuteriet)
             {
                 midi = buildChordMidi (sr, 80.0, total);
             }
@@ -466,8 +467,11 @@ int main (int argc, char* argv[])
         krang::params::Reader reader (host.state);
         int total = 0;
         const auto midi = buildMidi (sr, 112.0, 1, total);
-        for (int i : { 0, 4, 8 }) // Init Basmålen, Kopparrörsacid, Nyckelharpsdrön
+        for (const char* name : { "Init Basmålen", "Kopparrörsacid", "Nyckelharpsdrön", "Gammal rulle", "Ekon från ödemarken" })
         {
+            int i = 0;
+            while (i < presets.getNumFactory() && presets.getEntries()[(size_t) i].name != juce::String::fromUTF8 (name)) ++i;
+            if (i == presets.getNumFactory()) { std::cout << "saknar preset " << name << "  FEL\n"; ++failures; continue; }
             presets.load (i);
             auto* spak = host.state.getParameter (krang::params::id::krang);
             spak->setValueNotifyingHost (1.0f);
@@ -476,6 +480,359 @@ int main (int argc, char* argv[])
             const auto label = "krangspaken_" + presets.getEntries()[(size_t) i].name;
             failures += report (label.toRawUTF8(), s, latency, s.rmsDb < -5.0f) ? 0 : 1;
             writeWav (outDir.getChildFile ("krangbox_" + label.replace (" ", "_") + ".wav"), out, sr);
+        }
+    }
+
+    // Ekokammaren: rätt ekotid i synkat läge och i fritt läge (impuls in, första ekot ut).
+    {
+        auto firstEcho = [&] (const krang::EchoParams& ep, double bpm)
+        {
+            krang::Ekokammare echo;
+            echo.prepare (sr, blockSize);
+            echo.setParams (ep, bpm);
+            std::vector<float> buf ((size_t) (sr * 3.0), 0.0f);
+            echo.process (buf.data(), (int) sr);            // låt tidsglidningen landa först
+            std::fill (buf.begin(), buf.end(), 0.0f);
+            buf[0] = 1.0f;
+            echo.process (buf.data(), (int) buf.size());
+            int best = 1;
+            for (int i = 1; i < (int) buf.size(); ++i)
+                if (std::abs (buf[(size_t) i]) > std::abs (buf[(size_t) best])) best = i;
+            return best;
+        };
+        krang::EchoParams ep;
+        ep.mix = 1.0f; ep.feedback = 0.3f;
+        ep.sync = 2;                                               // 1/8 i 120 BPM = 250 ms
+        const int synced = firstEcho (ep, 120.0);
+        ep.sync = 3;                                               // punkterad 1/8 i 90 BPM = 500 ms
+        const int dotted = firstEcho (ep, 90.0);
+        ep.sync = 0; ep.timeMs = 333.0f;                           // fritt läge
+        const int free = firstEcho (ep, 120.0);
+        const bool ok = std::abs (synced - (int) (sr * 0.25)) <= 2 && std::abs (dotted - (int) (sr * 0.5)) <= 2
+                     && std::abs (free - (int) (sr * 0.333)) <= 2;
+        std::cout << "ekokammaren_tid: 1/8@120 " << synced << " (vantat " << (int) (sr * 0.25) << "), 1/8 punkt.@90 " << dotted
+                  << " (vantat " << (int) (sr * 0.5) << "), fri 333 ms " << free << "  " << (ok ? "OK" : "FEL") << "\n";
+        failures += ok ? 0 : 1;
+    }
+
+    // Bandmaskin och Ekokammare i botten: självsvängande eko (återkoppling 110 %) med slitet band.
+    // Ska förbli ändligt och begränsat även efter att tonerna tystnat.
+    {
+        int total = 0;
+        const auto midi = buildMidi (sr, 112.0, 1, total);
+        krang::EngineParams p;
+        p.tape = { 1.0f, 1.0f, 1.0f, 1.0f };
+        p.echo.mix = 0.6f; p.echo.feedback = 1.1f; p.echo.sync = 3; p.echo.dark = 0.5f;
+        p.bpm = 112.0;
+        const auto out = renderEngine (p, midi, total + (int) sr * 8, sr, blockSize, latency);
+        const auto s = analyse (out);
+        // Svansen: sista två sekunderna, när bara ekot lever kvar.
+        const int tailStart = out.getNumSamples() - (int) sr * 2;
+        const float tailRmsDb = juce::Decibels::gainToDecibels (out.getRMSLevel (0, tailStart, (int) sr * 2));
+        std::cout << "eko_sjalvsvangning: svans " << tailRmsDb << " dB RMS\n";
+        failures += report ("eko_sjalvsvangning", s, latency, s.rmsDb < -5.0f && tailRmsDb < -6.0f) ? 0 : 1;
+        writeWav (outDir.getChildFile ("krangbox_eko_sjalvsvangning.wav"), out, sr);
+
+        // Måttlig inställning, som ett ljud man faktiskt skulle använda.
+        p.tape = { 0.4f, 0.3f, 0.5f, 0.0f };
+        p.echo.feedback = 0.45f; p.echo.mix = 0.35f;
+        const auto out2 = renderEngine (p, midi, total + (int) sr * 3, sr, blockSize, latency);
+        failures += report ("bandeko", analyse (out2), latency) ? 0 : 1;
+        writeWav (outDir.getChildFile ("krangbox_bandeko.wav"), out2, sr);
+    }
+
+    // Bandmaskin + Ekokammare: CPU för hela kedjan med allt påslaget.
+    {
+        krang::EngineParams p;
+        p.tape = { 1.0f, 1.0f, 1.0f, 1.0f };
+        p.echo.mix = 0.5f; p.echo.feedback = 0.8f;
+        int total = 0;
+        const auto midi = buildMidi (sr, 112.0, 2, total);
+        const auto start = juce::Time::getMillisecondCounterHiRes();
+        renderEngine (p, midi, total, sr, blockSize, latency);
+        const double load = (juce::Time::getMillisecondCounterHiRes() - start) / ((double) total / sr * 1000.0) * 100.0;
+        std::cout << "band_eko_cpu: " << load << " % av en karna i realtid  " << (load < 15.0 ? "OK" : "FEL") << "\n";
+        failures += load < 15.0 ? 0 : 1;
+    }
+
+    // Kaosmotorn: händelser på taktslagen, inga klick från hack och baklänges, stabil i botten.
+    {
+        auto runSine = [&] (const krang::KaosParams& kp, double bpm, float& maxStep, juce::uint32& events, int seconds)
+        {
+            krang::Kaosmotorn kaos;
+            kaos.prepare (sr, blockSize);
+            kaos.setParams (kp, bpm);
+            std::vector<float> buf ((size_t) (sr * seconds));
+            for (size_t i = 0; i < buf.size(); ++i)
+                buf[i] = 0.5f * (float) std::sin (juce::MathConstants<double>::twoPi * 220.0 * (double) i / sr);
+            for (int pos = 0; pos < (int) buf.size(); pos += blockSize)
+                kaos.process (buf.data() + pos, juce::jmin (blockSize, (int) buf.size() - pos));
+            maxStep = 0.0f;
+            for (size_t i = 1; i < buf.size(); ++i)
+                maxStep = juce::jmax (maxStep, std::abs (buf[i] - buf[i - 1]));
+            events = kaos.getEventCount();
+            return buf;
+        };
+
+        // Hack och baklänges, alltid (Kaos 100 %), 1/16 i 120 BPM = 8 slag/s i 10 s = 80 slag.
+        krang::KaosParams kp;
+        kp.amount = 1.0f; kp.sync = 3; kp.drift = 0.0f; kp.stutter = 1.0f; kp.reverse = 1.0f; kp.crush = 0.0f;
+        float maxStep = 0.0f; juce::uint32 events = 0;
+        runSine (kp, 120.0, maxStep, events, 10);
+        const bool clickOk = maxStep < 0.06f;        // en ren 220 Hz-sinus på 0,5 har steg på 0,014
+        const bool countOk = events >= 40 && events <= 80; // ett hack kan räcka två slag
+        std::cout << "kaosmotorn_hack: " << events << " handelser pa 80 slag, storsta steg " << maxStep << "  "
+                  << (clickOk && countOk ? "OK" : "FEL") << "\n";
+        failures += clickOk && countOk ? 0 : 1;
+
+        // Av = helt förbikopplad.
+        kp.amount = 0.0f;
+        runSine (kp, 120.0, maxStep, events, 1);
+        std::cout << "kaosmotorn_av: " << events << " handelser  " << (events == 0 ? "OK" : "FEL") << "\n";
+        failures += events == 0 ? 0 : 1;
+
+        // Allt i botten genom hela kedjan, med Basmålen.
+        int total = 0;
+        const auto midi = buildMidi (sr, 112.0, 2, total);
+        krang::EngineParams p;
+        p.kaos = { 1.0f, 3, 4.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+        p.bpm = 112.0;
+        const auto start = juce::Time::getMillisecondCounterHiRes();
+        const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+        const double load = (juce::Time::getMillisecondCounterHiRes() - start) / ((double) total / sr * 1000.0) * 100.0;
+        const auto s = analyse (out);
+        failures += report ("kaosmotorn_botten", s, latency, s.rmsDb < -5.0f) ? 0 : 1;
+        writeWav (outDir.getChildFile ("krangbox_kaosmotorn_botten.wav"), out, sr);
+        std::cout << "kaosmotorn_cpu (hela kedjan): " << load << " % av en karna i realtid  " << (load < 15.0 ? "OK" : "FEL") << "\n";
+        failures += load < 15.0 ? 0 : 1;
+
+        // Måttligt kaos, som man skulle använda det.
+        p.kaos = { 0.3f, 3, 4.0f, 0.3f, 0.6f, 0.3f, 0.3f };
+        const auto out2 = renderEngine (p, midi, total, sr, blockSize, latency);
+        failures += report ("kaosmotorn_mattlig", analyse (out2), latency) ? 0 : 1;
+        writeWav (outDir.getChildFile ("krangbox_kaosmotorn_mattlig.wav"), out2, sr);
+    }
+
+    // Stålpiano: varje läge, pedalen, och CPU med sexton röster.
+    {
+        // En folkvisa i D-dorisk ovanpå ackorden, så att både diskant och bas hörs.
+        auto pianoMidi = [&] (int& total)
+        {
+            auto midi = buildChordMidi (sr, 80.0, total);
+            const int melody[] = { 62, 65, 69, 67, 65, 64, 62, 60, 62, 69, 72, 71, 69, 67, 65, 62 };
+            const int step = (int) (sr * 60.0 / 80.0 * 0.5);
+            for (int i = 0; i < 16; ++i)
+            {
+                midi.addEvent (juce::MidiMessage::noteOn (1, melody[i] + 12, 0.5f + 0.4f * (float) (i % 3 == 0)), i * step);
+                midi.addEvent (juce::MidiMessage::noteOff (1, melody[i] + 12), (i + 1) * step - 10);
+            }
+            return midi;
+        };
+        const char* names[] = { "piano", "hackbrade", "preparerat" };
+        for (int mode = 0; mode < 3; ++mode)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Stalpiano;
+            p.stalpiano.mode = (krang::StalMode) mode;
+            p.distortion.mix = 0.0f;
+            int total = 0;
+            const auto midi = pianoMidi (total);
+            const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+            const auto label = juce::String ("stalpiano_") + names[mode];
+            failures += report (label.toRawUTF8(), analyse (out), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + label + ".wav"), out, sr);
+        }
+
+        // Pedalen: en ton släpps efter 0,5 s. Utan pedal ska den tystna, med pedal klinga vidare.
+        auto tailDb = [&] (bool pedal)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Stalpiano;
+            p.distortion.mix = 0.0f;
+            p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            if (pedal) midi.addEvent (juce::MidiMessage::controllerEvent (1, 64, 127), 0);
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, 0.8f), 10);
+            midi.addEvent (juce::MidiMessage::noteOff (1, 60), (int) (sr * 0.5));
+            const auto out = renderEngine (p, midi, (int) (sr * 2.0), sr, blockSize, latency);
+            return juce::Decibels::gainToDecibels (out.getRMSLevel (0, (int) (sr * 1.5), (int) (sr * 0.5)), -150.0f);
+        };
+        const float dry = tailDb (false), held = tailDb (true);
+        const bool pedalOk = dry < -60.0f && held > -50.0f;
+        std::cout << "stalpiano_pedal: utan pedal " << dry << " dB, med pedal " << held << " dB efter 1 s  "
+                  << (pedalOk ? "OK" : "FEL") << "\n";
+        failures += pedalOk ? 0 : 1;
+
+        // Sexton röster samtidigt, med pedalen nere, i alla tre lägena.
+        for (int mode = 0; mode < 3; ++mode)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Stalpiano;
+            p.stalpiano.mode = (krang::StalMode) mode;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::controllerEvent (1, 64, 127), 0);
+            for (int n = 0; n < 16; ++n)
+                midi.addEvent (juce::MidiMessage::noteOn (1, 36 + n * 3, 0.9f), n * 64);
+            const int total = (int) (sr * 10.0);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            std::cout << "stalpiano_cpu_" << names[mode] << ": 16 roster, " << load << " % av en karna i realtid  "
+                      << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ((juce::String ("stalpiano_16_roster_") + names[mode]).toRawUTF8(), analyse (out), latency) ? 0 : 1;
+        }
+    }
+
+    // Stålpianots sex strängmaterial: samma ton i varje material. Djurhudens ton ska börja högre och sjunka,
+    // stålets ska ligga still, och silke och djurhud ska klinga kortare än stål.
+    {
+        const char* materials[] = { "stal", "massing", "koppar", "jarn", "silke", "djurhud" };
+        // Grundtonens frekvens i ett fönster: finsökning med Hann-fönstrad DFT runt 110 Hz.
+        auto pitchHz = [&] (const juce::AudioBuffer<float>& b, double from, double len)
+        {
+            const float* d = b.getReadPointer (0);
+            const int s0 = (int) (from * sr), n = (int) (len * sr);
+            double best = 0.0, bestHz = 0.0;
+            for (double hz = 100.0; hz <= 125.0; hz += 0.02)
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; ++i)
+                {
+                    const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+                    const double ph = juce::MathConstants<double>::twoPi * hz * i / sr;
+                    re += d[s0 + i] * w * std::cos (ph);
+                    im += d[s0 + i] * w * std::sin (ph);
+                }
+                const double mag = re * re + im * im;
+                if (mag > best) { best = mag; bestHz = hz; }
+            }
+            return bestHz;
+        };
+        double tailStal = 0.0;
+        bool ok = true;
+        for (int m = 0; m < 6; ++m)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Stalpiano;
+            p.stalpiano.material = (krang::StalMaterial) m;
+            p.stalpiano.hardness = 0.1f;          // mjukt slag: grundtonen dominerar, lätt att mäta
+            p.stalpiano.body = 0.0f;
+            p.distortion.mix = 0.0f;
+            p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 45, 1.0f), 0);
+            const auto out = renderEngine (p, midi, (int) (sr * 3.0), sr, blockSize, latency);
+            const double early = pitchHz (out, 0.01, 0.12), late = pitchHz (out, 0.9, 0.3);
+            const double sagCents = 1200.0 * std::log2 (early / late);
+            const double tail = out.getRMSLevel (0, (int) (sr * 1.5), (int) (sr * 1.0));
+            if (m == 0) tailStal = tail;
+            const auto s = analyse (out);
+            std::cout << "material_" << materials[m] << ": spanningsfall " << sagCents << " cent, svans "
+                      << juce::Decibels::gainToDecibels ((float) tail) << " dB\n";
+            ok &= report ((juce::String ("material_") + materials[m]).toRawUTF8(), s, latency);
+            if (m == 0) ok &= std::abs (sagCents) < 3.0;
+            if (m == 5) ok &= sagCents > 5.0;
+            if (m == 4 || m == 5) ok &= tail < tailStal * 0.5;
+            writeWav (outDir.getChildFile (juce::String ("krangbox_material_") + materials[m] + ".wav"), out, sr);
+        }
+        std::cout << "stalpiano_material: " << (ok ? "OK" : "FEL") << "\n";
+        failures += ok ? 0 : 1;
+    }
+
+    // Klockgjuteriet: varje klocktyp spelar en klockringning, en sprucken klocka i botten, svepet och CPU.
+    {
+        const char* types[] = { "kyrkklocka", "skalla", "gong", "rals", "skalklocka" };
+        auto ringing = [&] (int& total)
+        {
+            // Fyra klockor i växelringning, D-dorisk, med ett andetag mellan omgångarna.
+            juce::MidiBuffer midi;
+            const int notes[] = { 62, 60, 57, 55 };
+            const int step = (int) (sr * 0.45);
+            for (int round = 0; round < 3; ++round)
+                for (int i = 0; i < 4; ++i)
+                {
+                    const int at = (round * 5 + i) * step;
+                    midi.addEvent (juce::MidiMessage::noteOn (1, notes[i], 0.7f + 0.1f * (float) (i == 0)), at);
+                    midi.addEvent (juce::MidiMessage::noteOff (1, notes[i]), at + step / 2);
+                }
+            total = 15 * step + (int) (sr * 4.0);
+            return midi;
+        };
+        for (int t = 0; t < 5; ++t)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Klockgjuteriet;
+            p.klockor.type = (krang::BellType) t;
+            p.distortion.mix = 0.0f;
+            int total = 0;
+            const auto midi = ringing (total);
+            const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+            const auto label = juce::String ("klocka_") + types[t];
+            failures += report (label.toRawUTF8(), analyse (out), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + label + ".wav"), out, sr);
+
+            // Sprucken klocka med Krangspaken i botten: ska förbli stabil.
+            p.klockor.crack = 1.0f;
+            krang::applyKrangspaken (p, 1.0f);
+            const auto broken = renderEngine (p, midi, total, sr, blockSize, latency);
+            const auto sb = analyse (broken);
+            failures += report ((label + "_sprucken").toRawUTF8(), sb, latency, sb.rmsDb < -5.0f) ? 0 : 1;
+        }
+
+        // Svepet: en gong med Svep +100 % ska börja lägre och stiga (mätt med nollgenomgångar på brumtonen).
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Klockgjuteriet;
+            p.klockor.type = krang::BellType::Kyrkklocka;
+            p.klockor.sweep = 1.0f;
+            p.klockor.hardness = 0.0f;
+            p.distortion.mix = 0.0f;
+            p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 57, 1.0f), 0);
+            const auto out = renderEngine (p, midi, (int) (sr * 3.0), sr, blockSize, latency);
+            // Brumtonens frekvens (110 Hz när svepet landat): finsökning med Hann-fönstrad DFT mellan 80 och 125 Hz.
+            auto hz = [&] (double from, double len)
+            {
+                const float* d = out.getReadPointer (0);
+                const int s0 = (int) (from * sr), n = (int) (len * sr);
+                double best = 0.0, bestHz = 0.0;
+                for (double f = 80.0; f <= 125.0; f += 0.05)
+                {
+                    double re = 0.0, im = 0.0;
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+                        const double ph = juce::MathConstants<double>::twoPi * f * i / sr;
+                        re += d[s0 + i] * w * std::cos (ph);
+                        im += d[s0 + i] * w * std::sin (ph);
+                    }
+                    if (re * re + im * im > best) { best = re * re + im * im; bestHz = f; }
+                }
+                return bestHz;
+            };
+            const double early = hz (0.02, 0.15), late = hz (1.5, 0.5);
+            const double cents = 1200.0 * std::log2 (late / early);
+            const bool ok = cents > 100.0;
+            std::cout << "klocka_svep: tonen steg " << cents << " cent  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+
+        // Tolv gonger samtidigt: den tyngsta klocktypen.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Klockgjuteriet;
+            p.klockor.type = krang::BellType::Gong;
+            juce::MidiBuffer midi;
+            for (int n = 0; n < 12; ++n)
+                midi.addEvent (juce::MidiMessage::noteOn (1, 36 + n * 4, 0.9f), n * 64);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            std::cout << "klockgjuteriet_cpu: 12 gonger, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ("klockgjuteriet_12_gonger", analyse (out), latency) ? 0 : 1;
         }
     }
 
