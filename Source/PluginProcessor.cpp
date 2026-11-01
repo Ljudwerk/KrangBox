@@ -79,7 +79,9 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             engine.render (left + pos, right + pos, at - pos);
             pos = at;
         }
-        engine.handleMidi (meta.getMessage());
+        const auto msg = meta.getMessage();
+        if (msg.isNoteOn()) lastNote.store (msg.getNoteNumber(), std::memory_order_relaxed);
+        engine.handleMidi (msg);
     }
     if (pos < total)
         engine.render (left + pos, right + pos, total - pos);

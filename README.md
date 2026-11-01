@@ -4,7 +4,7 @@
 
 Instrument-plugin (VST3, AU, CLAP) och fristående app för macOS. Allt ljud är syntetiskt.
 
-**Status: fas 3 klar i kod, fas 3b pågår.** Sex kammare: Basmålen (bas), Hammarverket (trummaskin med Stegverket), Bordunorgeln (drön och folkklanger), Spolslingan (leads och slingor med arpeggiatorn Slingan) Stålpiano (piano, hackbräde och preparerat piano) och Klockgjuteriet (klockor och gonger). Planerade: Kören i schaktet, Lurblåsaren, Lutverket, Vattenpumpen och Radiomasten. Kaosmotorn gör allt opålitligt. Alla parametrar sitter på Krang-panelen, som skalas proportionellt mellan 60 och 160 %.
+**Status: fas 3 klar i kod, fas 3b pågår.** Åtta kammare: Basmålen (bas), Hammarverket (trummaskin med Stegverket), Bordunorgeln (drön och folkklanger), Spolslingan (leads och slingor med arpeggiatorn Slingan) Stålpiano (piano, hackbräde och preparerat piano) Klockgjuteriet (klockor och gonger) Kören i schaktet (kör, psalmsång och kulning) och Radiomasten (brus, signaler och atmosfär). Planerade: Lurblåsaren, Lutverket och Vattenpumpen. Kaosmotorn gör allt opålitligt. Alla parametrar sitter på Krang-panelen, som skalas proportionellt mellan 60 och 160 %.
 
 ![Krang-panelen med Basmålen](docs/krangpanelen_basmalen.png)
 
@@ -134,7 +134,7 @@ cmake --build build --config Release --target KrangRender
 ./build/KrangRender_artefacts/Release/KrangRender renders
 ```
 
-Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross), varje trumröst för sig, varje filter- och reverbläge (med hög resonans och stort rum, som stresstest) Stegverkets startmönster och alla fabrikspresets till WAV. Testar också Stegverkets timing mot en simulerad DAW, den interna klockan och gung, på sample-nivå, att alla fabrikspresets ligger mellan −16 och −7 dBFS RMS, och att tre presets förblir stabila med Krangspaken i topp, att Slingan spelar tonerna i rätt ordning och på rätt sample, och att Bordunorgeln med åtta röster håller sig under 25 % av en processorkärna. Ekokammarens tid mäts på sample-nivå, ekot ska överleva 110 % återkoppling, Kaosmotorn ska slå till på taktslagen utan klick och vara helt avstängd på noll. Stålpianot renderas i alla tre lägena, pedalen testas (en släppt ton ska tystna utan pedal och klinga vidare med), och sexton röster ska hålla sig under 25 % av en kärna. Alla sex strängmaterial renderas; stålets ton ska ligga still medan djurhudens sjunker efter anslaget, och silke och djurhud ska klinga kortare än stål. Klockgjuteriet renderas i alla fem klocktyper, även spruckna med Krangspaken i botten; svepet ska höja tonen och tolv gonger ska hålla sig under 25 % av en kärna. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
+Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross), varje trumröst för sig, varje filter- och reverbläge (med hög resonans och stort rum, som stresstest) Stegverkets startmönster och alla fabrikspresets till WAV. Testar också Stegverkets timing mot en simulerad DAW, den interna klockan och gung, på sample-nivå, att alla fabrikspresets ligger mellan −16 och −7 dBFS RMS, och att tre presets förblir stabila med Krangspaken i topp, att Slingan spelar tonerna i rätt ordning och på rätt sample, och att Bordunorgeln med åtta röster håller sig under 25 % av en processorkärna. Ekokammarens tid mäts på sample-nivå, ekot ska överleva 110 % återkoppling, Kaosmotorn ska slå till på taktslagen utan klick och vara helt avstängd på noll. Stålpianot renderas i alla tre lägena, pedalen testas (en släppt ton ska tystna utan pedal och klinga vidare med), och sexton röster ska hålla sig under 25 % av en kärna. Alla sex strängmaterial renderas; stålets ton ska ligga still medan djurhudens sjunker efter anslaget, och silke och djurhud ska klinga kortare än stål. Klockgjuteriet renderas i alla fem klocktyper, även spruckna med Krangspaken i botten; svepet ska höja tonen och tolv gonger ska hålla sig under 25 % av en kärna. Kören renderas i alla röstlägen; vokalerna A och I ska gå att skilja åt i spektrum, och 64 sångare ska hålla sig under 25 % av en kärna. Radiomasten renderas i alla fyra sändningar; telegrafens prickar och streck mäts mot tempot, och storm i botten ska förbli stabil. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
 
 ## Hammarverket
 
@@ -260,6 +260,56 @@ Krangspaken spräcker klockan och ökar svävningen.
 
 ![Krang-panelen med Klockgjuteriet](docs/krangpanelen_klockgjuteriet.png)
 
+## Kören i schaktet
+
+Den sjunde kammaren: en syntetisk kör med formantsyntes (8 toner, upp till 8 sångare per ton). Varje sångare är lite ostämd, har eget vibrato och egen drift och kommer in lite olika – det är det som gör en kör till en kör. Fem formanter per röst formar vokalen.
+
+| Röster | Klang |
+| --- | --- |
+| Mansröster | Mansformanter, mörkt och fylligt |
+| Kvinnoröster | Kvinnoformanter, ljusare |
+| Blandad kör | Varannan sångare med mans- och kvinnoröst |
+| Kulning | En ensam röst som glider upp i tonen, glider vidare mellan tonerna och faller av när du släpper |
+
+| Ratt | Vad den gör |
+| --- | --- |
+| Sångare | Hur många som sjunger varje ton (1–8) |
+| Spridning | Hur ostämda och osynkade sångarna är (cent) |
+| Vokal | A, E, I, O, U – glider mellan dem |
+| Vibrato | Vibratots djup; det kommer in efter en stund, som hos en riktig sångare |
+| Andning | Luft i rösten |
+| Insats, Avklang | Hur kören tar ton och släpper den |
+| Trasig | Kören hörs genom en trasig högtalare i schaktet: smal, skorrande och med glapp i kontakten |
+
+Krangspaken förstör högtalaren och sprider kören isär.
+
+![Krang-panelen med Kören i schaktet](docs/krangpanelen_koren.png)
+
+## Radiomasten
+
+Den åttonde kammaren: en spelbar radiomottagare för brus, signaler och atmosfär (8 stationer). Varje ton du spelar ställer in en station på tonens frekvens, och nålen på radioskalan följer den senast spelade tonen.
+
+| Sändning | Klang |
+| --- | --- |
+| Kortvåg | En visslande bärvåg som driver, och en avlägsen station som pratar i bruset |
+| Morse | Telegrafsignaler på tonen, en prick per sextondel i tempot. Olika toner sänder olika meddelanden: KRANG, SOS, VERNE och CQ CQ |
+| Vind i ledningar | Vinden sjunger i telegraftrådarna, i byar som väcker trådens övertoner |
+| Interferens | En fjärrskrivare som växlar mellan två toner, en svävande störton och nätbrum |
+
+| Ratt | Vad den gör |
+| --- | --- |
+| Signal | Hur stark stationen är mot bruset |
+| Bandbredd | Mottagarens bandbredd: smal och burkig, eller bred och fräsig |
+| Brus | Mottagarens sus |
+| Drift | Stationen glider ur inställning |
+| Fading | Signalen sjunker undan och kommer tillbaka |
+| Storm | Åskknaster |
+| Insats, Avklang | Hur stationen kommer och går |
+
+Krangspaken drar in åskan över masten: mer storm, fading och drift.
+
+![Krang-panelen med Radiomasten](docs/krangpanelen_radiomasten.png)
+
 ## Ångledningen (effekter)
 
 Signalvägen är: kammare → **Kaosmotorn** → **Krangdistortion** → **Ångfilter** → **Bandmaskinen** → **Ekokammaren** → **Katedralreverb** → limiter. Allt fram till reverben är mono; reverben gör ljudet stereo.
@@ -305,6 +355,8 @@ Uppe till höger på frontpanelen: `<` och `>` bläddrar, listan visar alla pres
 | Leads och slingor | Spolslingan, Munharpa i maskinhallen, Kulning över ödemarken, Trasig radio, Ångslinga, Spolpuls i ruinen, Ekon från ödemarken, Radion i bunkern |
 | Stålpiano | Init Stålpiano, Missionshuset, Hackbrädet, Skruvat piano, Stålregn, Kedjepianot, Hudharpan, Silkesqin, Kopparharpan |
 | Klockor | Init Klockgjuteriet, Kyrkklockan i dimman, Fäbodskällan, Operagongen, Rälsen i tunneln, Sprucken kyrkklocka, Sjungande skålen |
+| Kör | Init Kören, Psalm i schaktet, Kulning över dalen, Munkarna i gruvan, Högtalarkören, Spökkören |
+| Radio | Init Radiomasten, Nattsändning från Moskva, SOS från skeppet, Telegraftrådarna, Fjärrskrivaren, Åska över masten |
 | Trummor (med mönster) | Init Hammarverket, Smedjegång, Rostig fabrik, Folkdans i ruinerna, Ångslagets puls, Bitkrossad marsch, Katedralens slagverk, Träskedsbrygga, Ventilsystemet, Ekande smedja, Trasig trummaskin |
 
 Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar bara det som skiljer sig från standardvärdena. Egna presets sparas som `.krang`-filer (XML) i `~/Library/Application Support/KrangBox/Presets/` och kan delas mellan datorer. Ett eget preset kan inte få samma namn som ett fabrikspreset; det får då tillägget "(eget)".
@@ -321,6 +373,8 @@ Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar ba
 | `Source/dsp/Hammarverket.h` | Trummaskin: åtta syntetiska röster och MIDI-mappning | Sara |
 | `Source/dsp/Bordunorgeln.h` | Drönmotor: vågtabeller, stråkbrus, bordun, resonanssträngar | Sara |
 | `Source/dsp/Spolslingan.h` | Leads och slingor: FM, munharpa, radiokorn | Sara |
+| `Source/dsp/Radiomasten.h` | Radiomasten: kortvåg, morse, vind i ledningar och interferens | Sara |
+| `Source/dsp/Koren.h` | Kören i schaktet: formantsyntes, kulning och trasig högtalare | Sara |
 | `Source/dsp/Klockgjuteriet.h` | Klockgjuteriet: modalsyntes för klockor, gonger, räls och skålar | Sara |
 | `Source/dsp/Stalpiano.h` | Stålpiano: modalsyntes för piano, hackbräde och preparerat piano | Sara |
 | `Source/dsp/Slingan.h` | Arpeggiator med värdsynk och egen klocka | Sara |

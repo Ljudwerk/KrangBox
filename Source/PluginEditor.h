@@ -44,6 +44,8 @@ private:
     krang::ui::SpolslinganPanel spolslingan;
     krang::ui::StalpianoPanel stalpiano;
     krang::ui::KlockgjuterietPanel klockor;
+    krang::ui::KorenPanel koren;
+    krang::ui::RadiomastenPanel radio;
     krang::ui::AngledningenPanel angledningen;
     krang::ui::KaosPanel kaos;
 

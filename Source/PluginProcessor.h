@@ -72,6 +72,9 @@ public:
     // Antal händelser i Kaosmotorn; kaoslampan blinkar när det ändras.
     std::atomic<juce::uint32> kaosEvents { 0 };
 
+    // Senast spelade ton; Radiomastens skala ställer in nålen efter den.
+    std::atomic<int> lastNote { -1 };
+
     // Det virtuella keyboardet i gränssnittet skriver hit; noterna blandas in i MIDI-flödet.
     juce::MidiKeyboardState keyboardState;
 

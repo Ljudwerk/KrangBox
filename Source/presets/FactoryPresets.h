@@ -35,7 +35,9 @@ namespace mode
     constexpr float hall = 0, platta = 1, rostigTank = 2;
     constexpr float stalpiano = 4;
     constexpr float pianoLage = 0, hackbrade = 1, preparerat = 2;
-    constexpr float klockgjuteriet = 5;
+    constexpr float klockgjuteriet = 5, koren = 6, radiomasten = 7;
+    constexpr float kortvag = 0, morse = 1, vindLedningar = 2, interferens = 3;
+    constexpr float mansroster = 0, kvinnoroster = 1, blandadKor = 2, kulning = 3;
     constexpr float kyrkklocka = 0, skalla = 1, gong = 2, rals = 3, skalklocka = 4;
     constexpr float stal = 0, massing = 1, koppar = 2, jarn = 3, silke = 4, djurhud = 5;
     constexpr float kaosFri = 0, kaos4 = 1, kaos8 = 2, kaos16 = 3, kaos32 = 4;
@@ -270,6 +272,60 @@ inline const std::vector<FactoryPreset>& factoryPresets()
         { "Sjungande skålen", "Klockor",
           { { "chamber", klockgjuteriet }, { "klType", skalklocka }, { "klHard", 0.2f }, { "klBeat", 8.0f }, { "klDecay", 30.0f },
             { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        // ------------------------------------------------------------------ Kör
+        { "Init Kören", "Kör",
+          { { "chamber", koren }, { "distMix", 0.1f }, { "distDrive", 8.0f }, { "rvbMix", 0.3f } }, {} },
+
+        { "Psalm i schaktet", "Kör",
+          { { "chamber", koren }, { "koVoices", blandadKor }, { "koVowel", vokalO }, { "koSingers", 8.0f }, { "koSpread", 10.0f },
+            { "koVibrato", 0.35f }, { "koAttack", 0.8f }, { "koRelease", 2.0f }, { "distMix", 0.0f },
+            { "rvbMode", hall }, { "rvbMix", 0.5f }, { "rvbSize", 0.9f } }, {} },
+
+        { "Kulning över dalen", "Kör",
+          { { "chamber", koren }, { "master", 5.0f }, { "koVoices", kulning }, { "koVowel", vokalA }, { "koVibrato", 0.15f }, { "koBreath", 0.15f },
+            { "koAttack", 0.08f }, { "koRelease", 0.6f }, { "distMix", 0.0f },
+            { "ecSync", 1.0f }, { "ecFeedback", 0.4f }, { "ecDark", 0.6f }, { "ecMix", 0.25f }, { "rvbMode", hall }, { "rvbMix", 0.45f } }, {} },
+
+        { "Munkarna i gruvan", "Kör",
+          { { "chamber", koren }, { "koVoices", mansroster }, { "koVowel", vokalU }, { "koSingers", 8.0f }, { "koSpread", 5.0f },
+            { "koVibrato", 0.1f }, { "koAttack", 1.2f }, { "koRelease", 2.5f }, { "distMix", 0.0f },
+            { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbDark", 0.7f } }, {} },
+
+        { "Högtalarkören", "Kör",
+          { { "chamber", koren }, { "koVoices", kvinnoroster }, { "koVowel", vokalE }, { "koSpeaker", 0.8f },
+            { "distMix", 0.1f }, { "tpAge", 0.5f }, { "tpDropout", 0.3f }, { "rvbMode", rostigTank }, { "rvbMix", 0.3f } }, {} },
+
+        { "Spökkören", "Kör",
+          { { "chamber", koren }, { "koVoices", blandadKor }, { "koVowel", vokalI }, { "koSpread", 25.0f }, { "koBreath", 0.7f },
+            { "koVibrato", 0.6f }, { "koAttack", 2.0f }, { "koRelease", 3.0f }, { "distMix", 0.0f }, { "tpWow", 0.4f },
+            { "ecSync", 3.0f }, { "ecFeedback", 0.55f }, { "ecMix", 0.3f }, { "rvbMode", hall }, { "rvbMix", 0.5f } }, {} },
+
+        // ------------------------------------------------------------------ Radio
+        { "Init Radiomasten", "Radio",
+          { { "chamber", radiomasten }, { "distMix", 0.1f }, { "distDrive", 8.0f }, { "rvbMix", 0.2f } }, {} },
+
+        { "Nattsändning från Moskva", "Radio",
+          { { "chamber", radiomasten }, { "raMode", kortvag }, { "raFading", 0.6f }, { "raDrift", 0.4f }, { "raNoise", 0.5f },
+            { "raBandwidth", 0.3f }, { "distMix", 0.0f }, { "tpAge", 0.4f }, { "rvbMode", platta }, { "rvbMix", 0.2f } }, {} },
+
+        { "SOS från skeppet", "Radio",
+          { { "chamber", radiomasten }, { "raMode", morse }, { "raSignal", 0.8f }, { "raNoise", 0.35f }, { "raFading", 0.4f },
+            { "raStorm", 0.3f }, { "distMix", 0.0f }, { "ecSync", 2.0f }, { "ecFeedback", 0.35f }, { "ecMix", 0.2f },
+            { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        { "Telegraftrådarna", "Radio",
+          { { "chamber", radiomasten }, { "master", 2.0f }, { "raMode", vindLedningar }, { "raSignal", 0.7f }, { "raNoise", 0.2f }, { "raStorm", 0.1f },
+            { "raAttack", 1.5f }, { "raRelease", 3.0f }, { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.4f } }, {} },
+
+        { "Fjärrskrivaren", "Radio",
+          { { "chamber", radiomasten }, { "raMode", interferens }, { "raBandwidth", 0.4f }, { "raDrift", 0.5f },
+            { "distMode", bitkross }, { "distBits", 6.0f }, { "distMix", 0.3f }, { "rvbMix", 0.1f } }, {} },
+
+        { "Åska över masten", "Radio",
+          { { "chamber", radiomasten }, { "raMode", kortvag }, { "raStorm", 0.9f }, { "raFading", 0.8f }, { "raNoise", 0.6f },
+            { "distMix", 0.1f }, { "kaAmount", 0.2f }, { "kaStutter", 0.2f }, { "kaReverse", 0.1f }, { "kaCrush", 0.8f },
+            { "rvbMode", rostigTank }, { "rvbMix", 0.3f } }, {} },
 
         // ------------------------------------------------------------------ Trummor
         { "Init Hammarverket", "Trummor", { { "chamber", hammarverket } },

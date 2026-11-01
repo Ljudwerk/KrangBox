@@ -90,6 +90,26 @@ namespace id
     inline constexpr auto klHum       = "klHum";
     inline constexpr auto klSweep     = "klSweep";
 
+    inline constexpr auto koVoices    = "koVoices";
+    inline constexpr auto koVowel     = "koVowel";
+    inline constexpr auto koSingers   = "koSingers";
+    inline constexpr auto koSpread    = "koSpread";
+    inline constexpr auto koVibrato   = "koVibrato";
+    inline constexpr auto koBreath    = "koBreath";
+    inline constexpr auto koSpeaker   = "koSpeaker";
+    inline constexpr auto koAttack    = "koAttack";
+    inline constexpr auto koRelease   = "koRelease";
+
+    inline constexpr auto raMode      = "raMode";
+    inline constexpr auto raSignal    = "raSignal";
+    inline constexpr auto raNoise     = "raNoise";
+    inline constexpr auto raBandwidth = "raBandwidth";
+    inline constexpr auto raDrift     = "raDrift";
+    inline constexpr auto raFading    = "raFading";
+    inline constexpr auto raStorm     = "raStorm";
+    inline constexpr auto raAttack    = "raAttack";
+    inline constexpr auto raRelease   = "raRelease";
+
     inline constexpr auto kaAmount    = "kaAmount";
     inline constexpr auto kaSync      = "kaSync";
     inline constexpr auto kaRate      = "kaRate";
@@ -152,7 +172,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     // Kammare
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::chamber, 1 }, "Kammare",
-                                                         StringArray { String::fromUTF8 ("Basmålen"), "Hammarverket", "Bordunorgeln", "Spolslingan", String::fromUTF8 ("Stålpiano"), "Klockgjuteriet" }, 0));
+                                                         StringArray { String::fromUTF8 ("Basmålen"), "Hammarverket", "Bordunorgeln", "Spolslingan", String::fromUTF8 ("Stålpiano"), "Klockgjuteriet",
+                                                                       String::fromUTF8 ("Kören i schaktet"), "Radiomasten" }, 0));
 
     // Basmålen – oscillatorer
     add (id::osc1Level, "Osc 1 Sågtand", { 0.0f, 1.0f }, 0.8f);
@@ -251,6 +272,36 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     p.push_back (std::make_unique<P> (ParameterID { id::klSweep, 1 }, "Svep", NormalisableRange<float> (-1.0f, 1.0f), 0.0f,
                                       AudioParameterFloatAttributes().withLabel ("ct")
                                           .withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 300.0f)); })));
+
+    // Kören i schaktet
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::koVoices, 1 }, String::fromUTF8 ("Röster"),
+                                                         StringArray { String::fromUTF8 ("Mansröster"), String::fromUTF8 ("Kvinnoröster"),
+                                                                       String::fromUTF8 ("Blandad kör"), "Kulning" }, 2));
+    p.push_back (std::make_unique<P> (ParameterID { id::koVowel, 1 }, String::fromUTF8 ("Körvokal"), NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+                                      AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+                                      {
+                                          static const char* vowels[] = { "A", "E", "I", "O", "U" };
+                                          return String (vowels[jlimit (0, 4, roundToInt (v * 4.0f))]);
+                                      })));
+    p.push_back (std::make_unique<AudioParameterInt> (ParameterID { id::koSingers, 1 }, String::fromUTF8 ("Sångare"), 1, 8, 6));
+    add (id::koSpread,  "Körspridning", { 0.0f, 30.0f }, 8.0f, "ct");
+    add (id::koVibrato, "Körvibrato",   { 0.0f, 1.0f }, 0.3f);
+    add (id::koBreath,  "Andning",      { 0.0f, 1.0f }, 0.2f);
+    add (id::koSpeaker, "Trasig högtalare", { 0.0f, 1.0f }, 0.0f);
+    add (id::koAttack,  "Körens insats", time (4.0f), 0.4f, "s");
+    add (id::koRelease, "Körens avklang", time (6.0f), 1.2f, "s");
+
+    // Radiomasten
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::raMode, 1 }, String::fromUTF8 ("Sändning"),
+                                                         StringArray { String::fromUTF8 ("Kortvåg"), "Morse", "Vind i ledningar", "Interferens" }, 0));
+    add (id::raSignal,    "Signal",       { 0.0f, 1.0f }, 0.6f);
+    add (id::raNoise,     "Radiobrus",    { 0.0f, 1.0f }, 0.4f);
+    add (id::raBandwidth, "Bandbredd",    { 0.0f, 1.0f }, 0.5f);
+    add (id::raDrift,     "Radiodrift",   { 0.0f, 1.0f }, 0.3f);
+    add (id::raFading,    "Fading",       { 0.0f, 1.0f }, 0.3f);
+    add (id::raStorm,     "Storm",        { 0.0f, 1.0f }, 0.2f);
+    add (id::raAttack,    "Radions insats",  time (4.0f), 0.05f, "s");
+    add (id::raRelease,   "Radions avklang", time (6.0f), 0.6f, "s");
 
     // Kaosmotorn
     p.push_back (std::make_unique<P> (ParameterID { id::kaAmount, 1 }, "Kaos", NormalisableRange<float> (0.0f, 1.0f), 0.0f,
@@ -456,6 +507,28 @@ public:
         kl.crack      = v (id::klCrack);
         kl.hum        = v (id::klHum);
         kl.sweep      = v (id::klSweep);
+
+        auto& ko = e.koren;
+        ko.voices      = (ChoirVoices) (int) v (id::koVoices);
+        ko.vowel       = v (id::koVowel);
+        ko.singers     = (int) v (id::koSingers);
+        ko.spreadCents = v (id::koSpread);
+        ko.vibrato     = v (id::koVibrato);
+        ko.breath      = v (id::koBreath);
+        ko.speaker     = v (id::koSpeaker);
+        ko.attackSec   = v (id::koAttack);
+        ko.releaseSec  = v (id::koRelease);
+
+        auto& ra = e.radio;
+        ra.mode       = (RadioMode) (int) v (id::raMode);
+        ra.signal     = v (id::raSignal);
+        ra.noise      = v (id::raNoise);
+        ra.bandwidth  = v (id::raBandwidth);
+        ra.drift      = v (id::raDrift);
+        ra.fading     = v (id::raFading);
+        ra.storm      = v (id::raStorm);
+        ra.attackSec  = v (id::raAttack);
+        ra.releaseSec = v (id::raRelease);
 
         e.kaos.amount  = v (id::kaAmount);
         e.kaos.sync    = (int) v (id::kaSync);

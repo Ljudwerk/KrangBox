@@ -375,7 +375,8 @@ int main (int argc, char* argv[])
                 total = seqTotal + (int) sr * 2;
             }
             else if (p.chamber == krang::Chamber::Bordunorgeln || p.chamber == krang::Chamber::Stalpiano
-                     || p.chamber == krang::Chamber::Klockgjuteriet)
+                     || p.chamber == krang::Chamber::Klockgjuteriet || p.chamber == krang::Chamber::Koren
+                     || p.chamber == krang::Chamber::Radiomasten)
             {
                 midi = buildChordMidi (sr, 80.0, total);
             }
@@ -833,6 +834,169 @@ int main (int argc, char* argv[])
             std::cout << "klockgjuteriet_cpu: 12 gonger, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
             failures += load < 25.0 ? 0 : 1;
             failures += report ("klockgjuteriet_12_gonger", analyse (out), latency) ? 0 : 1;
+        }
+    }
+
+    // Kören i schaktet: varje röstläge, vokalerna, högtalaren och CPU.
+    {
+        const char* kinds[] = { "mansroster", "kvinnoroster", "blandad", "kulning" };
+        for (int k = 0; k < 4; ++k)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Koren;
+            p.koren.voices = (krang::ChoirVoices) k;
+            p.distortion.mix = 0.0f;
+            int total = 0;
+            auto midi = buildChordMidi (sr, 70.0, total);
+            if (k == 3) // kulning: en ensam melodi högt upp
+            {
+                midi.clear();
+                const int notes[] = { 74, 79, 81, 79, 74 };
+                const int step = (int) (sr * 0.9);
+                for (int i = 0; i < 5; ++i)
+                {
+                    midi.addEvent (juce::MidiMessage::noteOn (1, notes[i], 0.8f), i * step);
+                    midi.addEvent (juce::MidiMessage::noteOff (1, notes[i]), (i + 1) * step - (int) (sr * 0.25));
+                }
+                total = 5 * step + (int) (sr * 2.0);
+            }
+            const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+            const auto label = juce::String ("koren_") + kinds[k];
+            failures += report (label.toRawUTF8(), analyse (out), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + label + ".wav"), out, sr);
+        }
+
+        // Vokalerna ska gå att höra: A har mer energi kring 700 Hz än I (första formanten), och I mer kring 1,9 kHz (andra).
+        auto bandDb = [&] (float vowel, double centre)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Koren;
+            p.koren.voices = krang::ChoirVoices::Mansroster;
+            p.koren.vowel = vowel;
+            p.distortion.mix = 0.0f;
+            p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 48, 0.8f), 0);
+            const auto out = renderEngine (p, midi, (int) (sr * 2.0), sr, blockSize, latency);
+            juce::dsp::IIR::Filter<float> bp;
+            bp.coefficients = juce::dsp::IIR::Coefficients<float>::makeBandPass (sr, centre, 8.0);
+            double sum = 0.0, all = 0.0;
+            const float* d = out.getReadPointer (0);
+            for (int i = 0; i < out.getNumSamples(); ++i)
+            {
+                const float y = bp.processSample (d[i]);
+                if (i > (int) sr) { sum += (double) y * y; all += (double) d[i] * d[i]; }
+            }
+            return 10.0 * std::log10 ((sum + 1e-20) / (all + 1e-20)); // bandets andel av hela ljudet
+        };
+        // A: första formanten kring 650–700 Hz och andra kring 1080. I: första låg, andra uppe vid 1870.
+        const double a700 = bandDb (0.0f, 700.0), i700 = bandDb (0.5f, 700.0);
+        const double aTilt = bandDb (0.0f, 1870.0) - bandDb (0.0f, 1080.0);
+        const double iTilt = bandDb (0.5f, 1870.0) - bandDb (0.5f, 1080.0);
+        const bool vowelOk = a700 > i700 + 3.0 && iTilt > aTilt + 6.0;
+        std::cout << "koren_vokaler: A-I vid 700 Hz " << (a700 - i700) << " dB, andra formanten (1870 mot 1080 Hz) I "
+                  << iTilt << " dB, A " << aTilt << " dB  " << (vowelOk ? "OK" : "FEL") << "\n";
+        failures += vowelOk ? 0 : 1;
+
+        // Trasig högtalare i botten med Krangspaken: stabil och inte för stark.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Koren;
+            p.koren.speaker = 1.0f;
+            krang::applyKrangspaken (p, 1.0f);
+            int total = 0;
+            const auto midi = buildChordMidi (sr, 70.0, total);
+            const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+            const auto st = analyse (out);
+            failures += report ("koren_trasig_hogtalare", st, latency, st.rmsDb < -5.0f) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_koren_trasig_hogtalare.wav"), out, sr);
+        }
+
+        // Åtta toner med åtta sångare var, högtalaren på.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Koren;
+            p.koren.singers = 8;
+            p.koren.speaker = 0.5f;
+            juce::MidiBuffer midi;
+            for (int n = 0; n < 8; ++n)
+                midi.addEvent (juce::MidiMessage::noteOn (1, 43 + n * 4, 0.8f), n * 64);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            std::cout << "koren_cpu: 8 toner x 8 sangare, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ("koren_64_sangare", analyse (out), latency) ? 0 : 1;
+        }
+    }
+
+    // Radiomasten: varje sändning, telegrafens takt, storm i botten och CPU.
+    {
+        const char* modes[] = { "kortvag", "morse", "vind", "interferens" };
+        for (int m = 0; m < 4; ++m)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Radiomasten;
+            p.radio.mode = (krang::RadioMode) m;
+            p.distortion.mix = 0.0f;
+            p.bpm = 100.0;
+            int total = 0;
+            const auto midi = buildChordMidi (sr, 70.0, total);
+            const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+            const auto label = juce::String ("radio_") + modes[m];
+            failures += report (label.toRawUTF8(), analyse (out), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + label + ".wav"), out, sr);
+        }
+
+        // Telegrafen: ton 60 sänder KRANG. K = streck prick streck; i 120 BPM är en prick 0,125 s.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Radiomasten;
+            p.radio.mode = krang::RadioMode::Morse;
+            p.radio.noise = 0.0f; p.radio.storm = 0.0f; p.radio.fading = 0.0f; p.radio.drift = 0.0f;
+            p.radio.attackSec = 0.002f;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            p.bpm = 120.0;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, 1.0f), 0);
+            const auto out = renderEngine (p, midi, (int) (sr * 1.2), sr, blockSize, latency);
+            auto rmsDb = [&] (double a, double b)
+            { return juce::Decibels::gainToDecibels (out.getRMSLevel (0, (int) (a * sr), (int) ((b - a) * sr)), -120.0f); };
+            const float dash = rmsDb (0.05, 0.33), gap = rmsDb (0.40, 0.47), dot = rmsDb (0.52, 0.60), gap2 = rmsDb (0.66, 0.72);
+            const bool ok = dash > gap + 30.0f && dot > gap + 30.0f && dot > gap2 + 30.0f;
+            std::cout << "radio_morse: streck " << dash << " dB, mellanrum " << gap << " dB, prick " << dot << " dB  "
+                      << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+
+        // Storm, fading och drift i botten med Krangspaken: stabilt och inte för starkt.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Radiomasten;
+            p.radio.storm = 1.0f; p.radio.noise = 1.0f; p.radio.signal = 1.0f; p.radio.bandwidth = 1.0f;
+            krang::applyKrangspaken (p, 1.0f);
+            int total = 0;
+            const auto midi = buildChordMidi (sr, 70.0, total);
+            const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+            const auto st = analyse (out);
+            failures += report ("radio_storm", st, latency, st.rmsDb < -5.0f) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_radio_storm.wav"), out, sr);
+        }
+
+        // Åtta stationer samtidigt, i det tyngsta läget.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Radiomasten;
+            p.radio.mode = krang::RadioMode::Vind;
+            juce::MidiBuffer midi;
+            for (int n = 0; n < 8; ++n)
+                midi.addEvent (juce::MidiMessage::noteOn (1, 40 + n * 5, 0.8f), n * 64);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            std::cout << "radio_cpu: 8 stationer, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ("radio_8_stationer", analyse (out), latency) ? 0 : 1;
         }
     }
 

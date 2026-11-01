@@ -25,6 +25,8 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     content.addChildComponent (spolslingan);
     content.addChildComponent (stalpiano);
     content.addChildComponent (klockor);
+    content.addChildComponent (koren);
+    content.addChildComponent (radio);
 
     bindAll();
 
@@ -90,7 +92,7 @@ void KrangBoxEditor::bindAll()
     bindSlider (top.master.slider, id::master);
     bindSlider (top.lever.slider, id::krang);
 
-    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), stalpiano.bindings(), klockor.bindings(), angledningen.bindings(), kaos.bindings() })
+    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), stalpiano.bindings(), klockor.bindings(), koren.bindings(), radio.bindings(), angledningen.bindings(), kaos.bindings() })
     {
         for (auto& [slider, paramId] : bindings.sliders) bindSlider (*slider, paramId);
         for (auto& [combo, paramId] : bindings.combos)   bindCombo (*combo, paramId);
@@ -158,6 +160,8 @@ void KrangBoxEditor::layoutContent()
     spolslingan.setBounds (chamberArea);
     stalpiano.setBounds (chamberArea);
     klockor.setBounds (chamberArea);
+    koren.setBounds (chamberArea);
+    radio.setBounds (chamberArea);
     angledningen.setBounds (r.removeFromTop (angledningHeight));
     kaos.setBounds (r.removeFromTop (kaosHeight));
 
@@ -268,6 +272,8 @@ void KrangBoxEditor::timerCallback()
         else kaos.lamp.decay();
     }
 
+    radio.setTunedNote (processor.lastNote.load (std::memory_order_relaxed));
+
     // Kammarmodulen följer kammarväljaren.
     const int chamber = (int) processor.state.getRawParameterValue (krang::params::id::chamber)->load();
     if (chamber != shownChamber)
@@ -279,6 +285,8 @@ void KrangBoxEditor::timerCallback()
         spolslingan.setVisible (chamber == 3);
         stalpiano.setVisible (chamber == 4);
         klockor.setVisible (chamber == 5);
+        koren.setVisible (chamber == 6);
+        radio.setVisible (chamber == 7);
     }
 
     // Presetbyte från DAW:en (programlistan) eller nästa/föregående: följ med i listan.

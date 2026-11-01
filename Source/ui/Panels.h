@@ -570,6 +570,276 @@ private:
     textures::BackgroundCache background;
 };
 
+// --- Kören i schaktet ----------------------------------------------------------------
+
+class KorenPanel : public juce::Component
+{
+public:
+    KorenPanel()
+    {
+        for (auto* c : std::initializer_list<juce::Component*> { &voices, &singers, &spread, &vowel, &vibrato, &breath,
+                                                                 &attack, &release, &speaker })
+            addAndMakeVisible (c);
+        voices.onChange = [this] { repaint (hornArea); };
+        vowel.slider.onValueChange = [this] { repaint (hornArea); };
+        singers.slider.onValueChange = [this] { repaint (hornArea); };
+        speaker.slider.onValueChange = [this] { repaint (hornArea); };
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+        paintHorn (g);
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
+        for (auto& [r, title] : frames)
+            drawModuleFrame (g, r.toFloat(), title);
+        g.setColour (colours::brass);
+        g.setFont (panelFont (10.0f, false));
+        g.drawText (juce::String::fromUTF8 ("RÖSTER"), voices.getBounds().translated (0, -14).withHeight (12), juce::Justification::centredLeft);
+    }
+
+    void resized() override
+    {
+        background.invalidate();
+        frames.clear();
+        auto r = getLocalBounds().reduced (12, 10);
+        auto choir = r.removeFromLeft (290);  r.removeFromLeft (12);
+        auto voice = r.removeFromLeft (310);  r.removeFromLeft (12);
+        auto breathF = r.removeFromLeft (210); r.removeFromLeft (12);
+        auto horn = r;
+        frames = { { choir, juce::String::fromUTF8 ("Kören") }, { voice, juce::String::fromUTF8 ("Rösten") },
+                   { breathF, "Andetaget" }, { horn, juce::String::fromUTF8 ("Högtalaren") } };
+
+        auto knobRow = [] (juce::Rectangle<int> f) { return f.withTrimmedTop (28 + 60).withHeight (150).reduced (6, 0); };
+        voices.setBounds (choir.withTrimmedTop (28 + 26).withHeight (26).withSizeKeepingCentre (170, 26));
+        layoutRow (knobRow (choir), { &singers, &spread }, 100);
+        layoutRow (knobRow (voice), { &vowel, &vibrato, &breath }, 96);
+        layoutRow (knobRow (breathF), { &attack, &release }, 96);
+        auto h = knobRow (horn);
+        speaker.setBounds (h.removeFromLeft (100));
+        hornArea = horn.withTrimmedTop (34).reduced (10, 10).withTrimmedLeft (106);
+    }
+
+    Bindings bindings()
+    {
+        return { { { &singers.slider, "koSingers" }, { &spread.slider, "koSpread" }, { &vowel.slider, "koVowel" },
+                   { &vibrato.slider, "koVibrato" }, { &breath.slider, "koBreath" }, { &attack.slider, "koAttack" },
+                   { &release.slider, "koRelease" }, { &speaker.slider, "koSpeaker" } },
+                 { { &voices, "koVoices" } } };
+    }
+
+private:
+    // Högtalaren: en tratt i mässing, vokalen i grönt glas och en lampa för varje sångare.
+    void paintHorn (juce::Graphics& g)
+    {
+        using namespace juce;
+        if (hornArea.isEmpty()) return;
+        auto a = hornArea.toFloat();
+        const bool kulning = voices.getSelectedItemIndex() == 3;
+        const int n = kulning ? 1 : roundToInt (singers.slider.getValue());
+        const float broken = (float) speaker.slider.valueToProportionOfLength (speaker.slider.getValue());
+
+        // Vokalen i ett litet VFD-fönster.
+        auto glass = a.removeFromTop (54.0f).withSizeKeepingCentre (54.0f, 50.0f);
+        drawBrassBezel (g, glass, 6.0f, 3.0f);
+        g.setColour (colours::vfdGlass);
+        g.fillRoundedRectangle (glass.reduced (4.0f), 3.0f);
+        static const char* vowels[] = { "A", "E", "I", "O", "U" };
+        const String v (vowels[jlimit (0, 4, roundToInt (vowel.slider.valueToProportionOfLength (vowel.slider.getValue()) * 4.0))]);
+        g.setColour (colours::vfdText.withAlpha (0.25f));
+        g.setFont (panelFont (34.0f));
+        g.drawText (v, glass.translated (0.0f, 1.0f), Justification::centred);
+        g.setColour (colours::vfdText);
+        g.setFont (panelFont (30.0f));
+        g.drawText (v, glass, Justification::centred);
+
+        // Tratten.
+        a.removeFromTop (8.0f);
+        auto lamps = a.removeFromBottom (16.0f);
+        const float cx = a.getCentreX(), cy = a.getCentreY();
+        Path horn;
+        horn.startNewSubPath (cx - 8.0f, cy - 6.0f);
+        horn.lineTo (cx - a.getWidth() * 0.42f, cy - a.getHeight() * 0.45f);
+        horn.lineTo (cx - a.getWidth() * 0.42f, cy + a.getHeight() * 0.45f);
+        horn.lineTo (cx - 8.0f, cy + 6.0f);
+        horn.closeSubPath();
+        ColourGradient brass (colours::brassLight, cx - a.getWidth() * 0.4f, cy - a.getHeight() * 0.4f, colours::brassDark, cx, cy + 10.0f, false);
+        g.setGradientFill (brass);
+        g.fillPath (horn);
+        g.setColour (Colours::black.withAlpha (0.5f));
+        g.strokePath (horn, PathStrokeType (1.0f));
+        g.setColour (Colour (0xff2a241e));
+        g.fillRoundedRectangle (cx - 8.0f, cy - 12.0f, 26.0f, 24.0f, 4.0f); // drivsteget
+        drawRivet (g, { cx + 5.0f, cy }, 4.0f);
+        if (broken > 0.05f) // revor i tratten
+        {
+            g.setColour (Colours::black.withAlpha (0.8f));
+            g.drawLine (cx - a.getWidth() * 0.30f, cy - a.getHeight() * 0.30f,
+                        cx - a.getWidth() * 0.30f + 14.0f * broken, cy - a.getHeight() * 0.30f + 22.0f * broken, 1.4f);
+            g.drawLine (cx - a.getWidth() * 0.36f, cy + a.getHeight() * 0.20f,
+                        cx - a.getWidth() * 0.36f + 18.0f * broken, cy + a.getHeight() * 0.20f - 10.0f * broken, 1.2f);
+            textures::fill (g, horn.getBounds(), textures::rust(), 0.35f * broken, 0.0f);
+        }
+
+        // En lampa per sångare.
+        const float step = 14.0f, x0 = lamps.getCentreX() - step * 3.5f;
+        for (int i = 0; i < 8; ++i)
+        {
+            const auto c = Point<float> (x0 + step * (float) i, lamps.getCentreY());
+            g.setColour (i < n ? colours::tubeOrange : Colour (0xff3a2a1a));
+            g.fillEllipse (c.x - 4.0f, c.y - 4.0f, 8.0f, 8.0f);
+            if (i < n)
+            {
+                g.setColour (colours::tubeOrange.withAlpha (0.3f));
+                g.fillEllipse (c.x - 7.0f, c.y - 7.0f, 14.0f, 14.0f);
+            }
+        }
+    }
+
+    static juce::String u8 (const char* s) { return juce::String::fromUTF8 (s); }
+
+    juce::ComboBox voices;
+    KrangKnob singers { u8 ("Sångare") }, spread { "Spridning" }, vowel { "Vokal" }, vibrato { "Vibrato" },
+              breath { "Andning" }, attack { "Insats" }, release { "Avklang" }, speaker { "Trasig" };
+    std::vector<std::pair<juce::Rectangle<int>, juce::String>> frames;
+    juce::Rectangle<int> hornArea;
+    textures::BackgroundCache background;
+};
+
+// --- Radiomasten ------------------------------------------------------------------
+
+class RadiomastenPanel : public juce::Component
+{
+public:
+    RadiomastenPanel()
+    {
+        for (auto* c : std::initializer_list<juce::Component*> { &mode, &signal, &bandwidth, &noise, &drift, &fading, &storm,
+                                                                 &attack, &release })
+            addAndMakeVisible (c);
+        storm.slider.onValueChange = [this] { repaint (dialArea); };
+    }
+
+    // Nålen pekar på den senast spelade tonen (anropas från editorns timer).
+    void setTunedNote (int note)
+    {
+        if (note != tunedNote) { tunedNote = note; repaint (dialArea); }
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+        paintDial (g);
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
+        for (auto& [r, title] : frames)
+            drawModuleFrame (g, r.toFloat(), title);
+        g.setColour (colours::brass);
+        g.setFont (panelFont (10.0f, false));
+        g.drawText (juce::String::fromUTF8 ("SÄNDNING"), mode.getBounds().translated (0, -14).withHeight (12), juce::Justification::centredLeft);
+    }
+
+    void resized() override
+    {
+        background.invalidate();
+        frames.clear();
+        auto r = getLocalBounds().reduced (12, 10);
+        auto rx = r.removeFromLeft (290);    r.removeFromLeft (12);
+        auto ether = r.removeFromLeft (400); r.removeFromLeft (12);
+        auto tone = r.removeFromLeft (210);  r.removeFromLeft (12);
+        auto dial = r;
+        frames = { { rx, "Mottagaren" }, { ether, "Etern" }, { tone, "Tonen" }, { dial, "Radioskalan" } };
+
+        auto knobRow = [] (juce::Rectangle<int> f) { return f.withTrimmedTop (28 + 60).withHeight (150).reduced (6, 0); };
+        mode.setBounds (rx.withTrimmedTop (28 + 26).withHeight (26).withSizeKeepingCentre (170, 26));
+        layoutRow (knobRow (rx), { &signal, &bandwidth }, 100);
+        layoutRow (knobRow (ether), { &noise, &drift, &fading, &storm }, 92);
+        layoutRow (knobRow (tone), { &attack, &release }, 96);
+        dialArea = dial.withTrimmedTop (32).reduced (10, 8);
+    }
+
+    Bindings bindings()
+    {
+        return { { { &signal.slider, "raSignal" }, { &bandwidth.slider, "raBandwidth" }, { &noise.slider, "raNoise" },
+                   { &drift.slider, "raDrift" }, { &fading.slider, "raFading" }, { &storm.slider, "raStorm" },
+                   { &attack.slider, "raAttack" }, { &release.slider, "raRelease" } },
+                 { { &mode, "raMode" } } };
+    }
+
+private:
+    // Radioskalan: en rund, glödande skala med stationsnamn, och en nål som ställs in på tonen man spelar.
+    void paintDial (juce::Graphics& g)
+    {
+        using namespace juce;
+        if (dialArea.isEmpty()) return;
+        const auto a = dialArea.toFloat();
+        const float size = jmin (a.getWidth(), a.getHeight());
+        auto face = a.withSizeKeepingCentre (size, size);
+        drawBrassBezel (g, face, size * 0.5f, 5.0f);
+        auto glass = face.reduced (6.0f);
+        ColourGradient glow (Colour (0xffe9c27a), glass.getCentreX(), glass.getCentreY(), Colour (0xff6e4a1c), glass.getX(), glass.getY(), true);
+        g.setGradientFill (glow);
+        g.fillEllipse (glass);
+
+        const float cx = glass.getCentreX(), cy = glass.getCentreY() + size * 0.08f, rad = size * 0.40f;
+        const float a0 = degreesToRadians (-130.0f), a1 = degreesToRadians (130.0f);
+
+        // Streck för varje oktav (C1–C7) och mellanstreck.
+        g.setColour (Colour (0xff3a2510));
+        for (int i = 0; i <= 24; ++i)
+        {
+            const float ang = a0 + (a1 - a0) * (float) i / 24.0f;
+            const float len = (i % 4 == 0) ? 9.0f : 4.0f;
+            g.drawLine (cx + std::sin (ang) * rad, cy - std::cos (ang) * rad,
+                        cx + std::sin (ang) * (rad - len), cy - std::cos (ang) * (rad - len), i % 4 == 0 ? 1.4f : 0.8f);
+        }
+        // Stationerna.
+        static const char* stations[] = { "MOTALA", "HÖRBY", "MOSKVA", "LUXEMBURG", "ÅNGVIK", "KALUNDBORG" };
+        g.setFont (panelFont (jmax (7.0f, size * 0.038f)));
+        for (int i = 0; i < 6; ++i)
+        {
+            const float ang = a0 + (a1 - a0) * ((float) i + 0.5f) / 6.0f;
+            const float tr = rad - 22.0f;
+            Graphics::ScopedSaveState s (g);
+            g.addTransform (AffineTransform::rotation (ang, cx, cy));
+            g.drawText (String::fromUTF8 (stations[i]), Rectangle<float> (cx - 40.0f, cy - tr - 6.0f, 80.0f, 12.0f), Justification::centred);
+        }
+
+        // Nålen: C1 (24) till C7 (96).
+        const float t = tunedNote < 0 ? 0.5f : jlimit (0.0f, 1.0f, (float) (tunedNote - 24) / 72.0f);
+        const float ang = a0 + (a1 - a0) * t;
+        g.setColour (colours::meterRed);
+        g.drawLine (cx, cy, cx + std::sin (ang) * (rad + 2.0f), cy - std::cos (ang) * (rad + 2.0f), 2.0f);
+        drawRivet (g, { cx, cy }, 6.0f);
+
+        // Storm: blixtrande ljus över glaset.
+        const float st = (float) storm.slider.valueToProportionOfLength (storm.slider.getValue());
+        if (st > 0.02f)
+        {
+            g.setColour (Colours::white.withAlpha (0.08f * st));
+            g.fillEllipse (glass);
+        }
+        ColourGradient refl (Colours::white.withAlpha (0.12f), glass.getX(), glass.getY(), Colours::transparentWhite, glass.getX(), glass.getCentreY(), false);
+        g.setGradientFill (refl);
+        g.fillEllipse (glass.withHeight (glass.getHeight() * 0.5f).reduced (glass.getWidth() * 0.12f, 2.0f));
+    }
+
+
+    juce::ComboBox mode;
+    KrangKnob signal { "Signal" }, bandwidth { "Bandbredd" }, noise { "Brus" }, drift { "Drift" }, fading { "Fading" },
+              storm { "Storm" }, attack { "Insats" }, release { "Avklang" };
+    std::vector<std::pair<juce::Rectangle<int>, juce::String>> frames;
+    juce::Rectangle<int> dialArea;
+    int tunedNote = -1;
+    textures::BackgroundCache background;
+};
+
 // --- Spolslingan ----------------------------------------------------------------
 
 class SpolslinganPanel : public juce::Component

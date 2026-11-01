@@ -11,6 +11,8 @@
 #include "Spolslingan.h"
 #include "Stalpiano.h"
 #include "Klockgjuteriet.h"
+#include "Koren.h"
+#include "Radiomasten.h"
 #include "Slingan.h"
 #include "KrangDistortion.h"
 #include "Stegverket.h"
@@ -22,7 +24,7 @@ namespace krang
 {
 
 // Vilken kammare (ljudmotor) som spelar. Fler tillkommer i fas 3.
-enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan, Stalpiano, Klockgjuteriet };
+enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan, Stalpiano, Klockgjuteriet, Koren, Radiomasten };
 
 struct EngineParams
 {
@@ -33,6 +35,8 @@ struct EngineParams
     SpolslinganParams spolslingan;
     StalpianoParams stalpiano;
     KlockgjuterietParams klockor;
+    KorenParams koren;
+    RadiomastenParams radio;
     SlinganSettings slingan;
     StegverketSettings stegverket;
     DistortionParams distortion;
@@ -85,6 +89,13 @@ inline void applyKrangspaken (EngineParams& e, float k)
     e.klockor.crack     = toward (e.klockor.crack, 0.7f, 0.7f);  // klockan spricker
     e.klockor.beatCents = e.klockor.beatCents + 10.0f * k;
 
+    e.koren.speaker     = toward (e.koren.speaker, 0.8f, 0.8f);   // kören hörs genom en allt sämre högtalare
+    e.koren.spreadCents = e.koren.spreadCents + 15.0f * k;
+
+    e.radio.storm   = toward (e.radio.storm, 0.8f, 0.8f);         // åskan drar in över masten
+    e.radio.fading  = toward (e.radio.fading, 0.7f, 0.7f);
+    e.radio.drift   = toward (e.radio.drift, 0.9f, 0.6f);
+
     e.tape.wow     = toward (e.tape.wow, 0.7f, 0.6f);
     e.tape.age     = toward (e.tape.age, 0.8f, 0.6f);
     e.tape.dropout = toward (e.tape.dropout, 0.5f, 0.5f);
@@ -113,6 +124,8 @@ public:
         spolslingan.prepare (sampleRate, maxBlockSize);
         stalpiano.prepare (sampleRate, maxBlockSize);
         klockor.prepare (sampleRate, maxBlockSize);
+        koren.prepare (sampleRate, maxBlockSize);
+        radio.prepare (sampleRate, maxBlockSize);
         distortion.prepare (sampleRate, maxBlockSize);
         filter.prepare (sampleRate, maxBlockSize);
         kaos.prepare (sampleRate, maxBlockSize);
@@ -134,6 +147,8 @@ public:
         spolslingan.reset();
         stalpiano.reset();
         klockor.reset();
+        koren.reset();
+        radio.reset();
         distortion.reset();
         filter.reset();
         kaos.reset();
@@ -155,6 +170,8 @@ public:
             spolslingan.allNotesOff();
             stalpiano.allNotesOff();
             klockor.allNotesOff();
+            koren.allNotesOff();
+            radio.allNotesOff();
             chamber = p.chamber;
         }
         basmalen.setParams (p.basmalen);
@@ -163,6 +180,8 @@ public:
         spolslingan.setParams (p.spolslingan);
         stalpiano.setParams (p.stalpiano);
         klockor.setParams (p.klockor);
+        koren.setParams (p.koren);
+        radio.setParams (p.radio, p.bpm);
         distortion.setParams (p.distortion);
         filter.setParams (p.filter);
         kaos.setParams (p.kaos, p.bpm);
@@ -183,6 +202,8 @@ public:
                 case Chamber::Spolslingan:  spolslingan.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Stalpiano:    stalpiano.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Klockgjuteriet: klockor.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Koren:        koren.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Radiomasten:  radio.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Basmalen:     basmalen.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
             }
         }
@@ -195,6 +216,8 @@ public:
                 case Chamber::Spolslingan:  spolslingan.noteOff (m.getNoteNumber()); break;
                 case Chamber::Stalpiano:    stalpiano.noteOff (m.getNoteNumber()); break;
                 case Chamber::Klockgjuteriet: klockor.noteOff (m.getNoteNumber()); break;
+                case Chamber::Koren:        koren.noteOff (m.getNoteNumber()); break;
+                case Chamber::Radiomasten:  radio.noteOff (m.getNoteNumber()); break;
                 case Chamber::Basmalen:     basmalen.noteOff (m.getNoteNumber()); break;
             }
         }
@@ -206,6 +229,8 @@ public:
             spolslingan.allNotesOff();
             stalpiano.allNotesOff();
             klockor.allNotesOff();
+            koren.allNotesOff();
+            radio.allNotesOff();
         }
         else if (m.isSustainPedalOn() || m.isSustainPedalOff())
         {
@@ -227,6 +252,8 @@ public:
             case Chamber::Spolslingan:  spolslingan.render (left, numSamples); break;
             case Chamber::Stalpiano:    stalpiano.render (left, numSamples); break;
             case Chamber::Klockgjuteriet: klockor.render (left, numSamples); break;
+            case Chamber::Koren:        koren.render (left, numSamples); break;
+            case Chamber::Radiomasten:  radio.render (left, numSamples); break;
             case Chamber::Basmalen:     basmalen.render (left, numSamples); break;
         }
         kaos.process (left, numSamples);
@@ -267,6 +294,8 @@ private:
     Spolslingan spolslingan;
     Stalpiano stalpiano;
     Klockgjuteriet klockor;
+    Koren koren;
+    Radiomasten radio;
     KrangDistortion distortion;
     AngFilter filter;
     Kaosmotorn kaos;
