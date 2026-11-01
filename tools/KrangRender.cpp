@@ -377,7 +377,7 @@ int main (int argc, char* argv[])
             else if (p.chamber == krang::Chamber::Bordunorgeln || p.chamber == krang::Chamber::Stalpiano
                      || p.chamber == krang::Chamber::Klockgjuteriet || p.chamber == krang::Chamber::Koren
                      || p.chamber == krang::Chamber::Radiomasten || p.chamber == krang::Chamber::Lurblasaren
-                     || p.chamber == krang::Chamber::Lutverket)
+                     || p.chamber == krang::Chamber::Lutverket || p.chamber == krang::Chamber::Vattenpumpen)
             {
                 midi = buildChordMidi (sr, 80.0, total);
             }
@@ -1203,6 +1203,96 @@ int main (int argc, char* argv[])
             std::cout << "lut_cpu: 36 strangar, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
             failures += load < 25.0 ? 0 : 1;
             failures += report ("lut_36_strangar", analyse (out), latency) ? 0 : 1;
+        }
+    }
+
+    // Vattenpumpen: varje metall på rätt ton, sågens glid, allt i botten och CPU.
+    {
+        auto pitchNear = [&] (const juce::AudioBuffer<float>& b, double from, double len, double lo, double hi)
+        {
+            const float* d = b.getReadPointer (0);
+            const int s0 = (int) (from * sr), n = (int) (len * sr);
+            double best = 0.0, bestHz = 0.0;
+            for (double f = lo; f <= hi; f += lo * 0.0003)
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; i += 2)
+                {
+                    const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+                    const double ph = juce::MathConstants<double>::twoPi * f * i / sr;
+                    re += d[s0 + i] * w * std::cos (ph);
+                    im += d[s0 + i] * w * std::sin (ph);
+                }
+                if (re * re + im * im > best) { best = re * re + im * im; bestHz = f; }
+            }
+            return bestHz;
+        };
+        const char* types[] = { "vattenfon", "sag", "plat", "cymbal" };
+        for (int t = 0; t < 4; ++t)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Vattenpumpen;
+            p.pump.type = (krang::BowedType) t;
+            p.pump.water = 0.0f; p.pump.vibrato = 0.0f;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 57, 0.8f), 0);
+            const auto out = renderEngine (p, midi, (int) (sr * 1.5), sr, blockSize, latency);
+            const double hz = pitchNear (out, 0.6, 0.6, 200.0, 240.0);
+            const double cents = 1200.0 * std::log2 (hz / 220.0);
+            const float level = juce::Decibels::gainToDecibels (out.getRMSLevel (0, (int) (sr * 0.6), (int) (sr * 0.6)), -120.0f);
+            const bool ok = std::abs (cents) < 10.0 && level > -30.0f;
+            std::cout << "pump_" << types[t] << ": " << hz << " Hz (" << cents << " cent), niva " << level << " dB  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+
+            p.pump.water = 0.5f; p.pump.vibrato = 0.3f;
+            int total = 0;
+            const auto chords = buildChordMidi (sr, 70.0, total);
+            const auto music = renderEngine (p, chords, total, sr, blockSize, latency);
+            failures += report ((juce::String ("pump_") + types[t]).toRawUTF8(), analyse (music), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile (juce::String ("krangbox_pump_") + types[t] + ".wav"), music, sr);
+
+            // Allt i botten med Krangspaken.
+            p.pump.pressure = 1.0f; p.pump.speed = 1.0f; p.pump.rust = 1.0f; p.pump.water = 1.0f;
+            krang::applyKrangspaken (p, 1.0f);
+            const auto wild = renderEngine (p, chords, total, sr, blockSize, latency);
+            const auto sw = analyse (wild);
+            failures += report ((juce::String ("pump_botten_") + types[t]).toRawUTF8(), sw, latency, sw.rmsDb < -4.0f) ? 0 : 1;
+        }
+
+        // Sågens glid: A3 hålls, E4 spelas legato – halvvägs genom glidet ligger tonen mellan dem.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Vattenpumpen;
+            p.pump.type = krang::BowedType::Sag;
+            p.pump.glideSec = 1.0f; p.pump.vibrato = 0.0f; p.pump.water = 0.0f;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 57, 0.8f), 0);
+            midi.addEvent (juce::MidiMessage::noteOn (1, 64, 0.8f), (int) (sr * 1.0));
+            midi.addEvent (juce::MidiMessage::noteOff (1, 57), (int) (sr * 1.0) + 10);
+            const auto out = renderEngine (p, midi, (int) (sr * 3.5), sr, blockSize, latency);
+            const double start = pitchNear (out, 0.5, 0.4, 200.0, 360.0), end = pitchNear (out, 2.8, 0.5, 200.0, 360.0);
+            const bool ok = std::abs (1200.0 * std::log2 (start / 220.0)) < 15.0 && std::abs (1200.0 * std::log2 (end / 329.63)) < 15.0;
+            std::cout << "pump_glid: " << start << " Hz -> " << end << " Hz (vantat 220 -> 329,6)  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_pump_sagglid.wav"), out, sr);
+        }
+
+        // Åtta plåtar samtidigt (96 resonatorer).
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Vattenpumpen;
+            p.pump.type = krang::BowedType::Plat;
+            juce::MidiBuffer midi;
+            for (int n = 0; n < 8; ++n)
+                midi.addEvent (juce::MidiMessage::noteOn (1, 40 + n * 4, 0.8f), n * 64);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            std::cout << "pump_cpu: 8 platar, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ("pump_8_platar", analyse (out), latency) ? 0 : 1;
         }
     }
 

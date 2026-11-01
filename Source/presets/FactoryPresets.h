@@ -35,7 +35,8 @@ namespace mode
     constexpr float hall = 0, platta = 1, rostigTank = 2;
     constexpr float stalpiano = 4;
     constexpr float pianoLage = 0, hackbrade = 1, preparerat = 2;
-    constexpr float klockgjuteriet = 5, koren = 6, radiomasten = 7, lurblasaren = 8, lutverket = 9;
+    constexpr float klockgjuteriet = 5, koren = 6, radiomasten = 7, lurblasaren = 8, lutverket = 9, vattenpumpen = 10;
+    constexpr float vattenfon = 0, sag = 1, plat = 2, cymbal = 3;
     constexpr float kantele = 0, luta = 1, cittra = 2, rostharpa = 3;
     constexpr float naverlur = 0, bockhorn = 1, skalmeja = 2, angvissla = 3;
     constexpr float kortvag = 0, morse = 1, vindLedningar = 2, interferens = 3;
@@ -380,6 +381,32 @@ inline const std::vector<FactoryPreset>& factoryPresets()
           { { "chamber", lutverket }, { "master", 2.5f }, { "ltType", kantele }, { "ltHard", 0.8f }, { "ltDecay", 6.0f }, { "ltBuzz", 0.2f },
             { "distMix", 0.15f }, { "kaAmount", 0.25f }, { "kaStutter", 0.7f }, { "kaReverse", 0.4f }, { "kaCrush", 0.0f },
             { "ecSync", 2.0f }, { "ecMix", 0.2f }, { "rvbMode", hall }, { "rvbMix", 0.25f } }, {} },
+
+        // ------------------------------------------------------------------ Stråkad metall
+        { "Init Vattenpumpen", "Stråkad metall",
+          { { "chamber", vattenpumpen }, { "distMix", 0.1f }, { "distDrive", 8.0f }, { "rvbMix", 0.3f } }, {} },
+
+        { "Vattenfonen i tunneln", "Stråkad metall",
+          { { "chamber", vattenpumpen }, { "master", 2.0f }, { "vpType", vattenfon }, { "vpWater", 0.7f }, { "vpPressure", 0.4f }, { "vpAttack", 1.0f },
+            { "vpRelease", 3.0f }, { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.5f }, { "rvbSize", 0.9f } }, {} },
+
+        { "Sjungande sågen", "Stråkad metall",
+          { { "chamber", vattenpumpen }, { "vpType", sag }, { "vpGlide", 0.4f }, { "vpVibrato", 0.5f }, { "vpPressure", 0.3f },
+            { "vpAttack", 0.4f }, { "vpRelease", 1.2f }, { "distMix", 0.0f }, { "rvbMode", platta }, { "rvbMix", 0.35f } }, {} },
+
+        { "Plåtåskan", "Stråkad metall",
+          { { "chamber", vattenpumpen }, { "vpType", plat }, { "vpPressure", 0.7f }, { "vpRust", 0.4f }, { "vpAttack", 0.6f },
+            { "vpRelease", 2.5f }, { "distMix", 0.15f }, { "rvbMode", rostigTank }, { "rvbMix", 0.35f } }, {} },
+
+        { "Cymbalens skrik", "Stråkad metall",
+          { { "chamber", vattenpumpen }, { "vpType", cymbal }, { "vpPressure", 0.85f }, { "vpSpeed", 0.9f }, { "vpAttack", 1.5f },
+            { "vpRelease", 4.0f }, { "distMix", 0.0f }, { "ecSync", 1.0f }, { "ecFeedback", 0.4f }, { "ecMix", 0.2f },
+            { "rvbMode", hall }, { "rvbMix", 0.45f } }, {} },
+
+        { "Pumpstationen", "Stråkad metall",
+          { { "chamber", vattenpumpen }, { "vpType", vattenfon }, { "vpWater", 1.0f }, { "vpRust", 0.5f }, { "vpPressure", 0.6f },
+            { "distMode", fuzz }, { "distDrive", 10.0f }, { "distMix", 0.25f }, { "kaAmount", 0.15f }, { "kaStutter", 0.3f },
+            { "kaReverse", 0.7f }, { "kaCrush", 0.0f }, { "tpWow", 0.4f }, { "rvbMode", hall }, { "rvbMix", 0.4f } }, {} },
 
         // ------------------------------------------------------------------ Trummor
         { "Init Hammarverket", "Trummor", { { "chamber", hammarverket } },

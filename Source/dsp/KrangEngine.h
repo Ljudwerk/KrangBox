@@ -15,6 +15,7 @@
 #include "Radiomasten.h"
 #include "Lurblasaren.h"
 #include "Lutverket.h"
+#include "Vattenpumpen.h"
 #include "Slingan.h"
 #include "KrangDistortion.h"
 #include "Stegverket.h"
@@ -26,7 +27,7 @@ namespace krang
 {
 
 // Vilken kammare (ljudmotor) som spelar. Fler tillkommer i fas 3.
-enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan, Stalpiano, Klockgjuteriet, Koren, Radiomasten, Lurblasaren, Lutverket };
+enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan, Stalpiano, Klockgjuteriet, Koren, Radiomasten, Lurblasaren, Lutverket, Vattenpumpen };
 
 struct EngineParams
 {
@@ -41,6 +42,7 @@ struct EngineParams
     RadiomastenParams radio;
     LurblasarenParams lur;
     LutverketParams lut;
+    VattenpumpenParams pump;
     SlinganSettings slingan;
     StegverketSettings stegverket;
     DistortionParams distortion;
@@ -107,6 +109,10 @@ inline void applyKrangspaken (EngineParams& e, float k)
     e.lut.buzz        = toward (e.lut.buzz, 0.7f, 0.8f);         // strängarna surrar mot rostig metall
     e.lut.courseCents = e.lut.courseCents + 10.0f * k;
 
+    e.pump.pressure = toward (e.pump.pressure, 1.0f, 0.6f);       // stråken trycks hårt: metallen skriker
+    e.pump.rust     = toward (e.pump.rust, 0.7f, 0.7f);
+    e.pump.water    = toward (e.pump.water, 1.0f, 0.5f);
+
     e.tape.wow     = toward (e.tape.wow, 0.7f, 0.6f);
     e.tape.age     = toward (e.tape.age, 0.8f, 0.6f);
     e.tape.dropout = toward (e.tape.dropout, 0.5f, 0.5f);
@@ -139,6 +145,7 @@ public:
         radio.prepare (sampleRate, maxBlockSize);
         lur.prepare (sampleRate, maxBlockSize);
         lut.prepare (sampleRate, maxBlockSize);
+        pump.prepare (sampleRate, maxBlockSize);
         distortion.prepare (sampleRate, maxBlockSize);
         filter.prepare (sampleRate, maxBlockSize);
         kaos.prepare (sampleRate, maxBlockSize);
@@ -164,6 +171,7 @@ public:
         radio.reset();
         lur.reset();
         lut.reset();
+        pump.reset();
         distortion.reset();
         filter.reset();
         kaos.reset();
@@ -189,6 +197,7 @@ public:
             radio.allNotesOff();
             lur.allNotesOff();
             lut.allNotesOff();
+            pump.allNotesOff();
             chamber = p.chamber;
         }
         basmalen.setParams (p.basmalen);
@@ -201,6 +210,7 @@ public:
         radio.setParams (p.radio, p.bpm);
         lur.setParams (p.lur);
         lut.setParams (p.lut);
+        pump.setParams (p.pump);
         distortion.setParams (p.distortion);
         filter.setParams (p.filter);
         kaos.setParams (p.kaos, p.bpm);
@@ -225,6 +235,7 @@ public:
                 case Chamber::Radiomasten:  radio.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Lurblasaren:  lur.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Lutverket:    lut.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Vattenpumpen: pump.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Basmalen:     basmalen.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
             }
         }
@@ -241,6 +252,7 @@ public:
                 case Chamber::Radiomasten:  radio.noteOff (m.getNoteNumber()); break;
                 case Chamber::Lurblasaren:  lur.noteOff (m.getNoteNumber()); break;
                 case Chamber::Lutverket:    lut.noteOff (m.getNoteNumber()); break;
+                case Chamber::Vattenpumpen: pump.noteOff (m.getNoteNumber()); break;
                 case Chamber::Basmalen:     basmalen.noteOff (m.getNoteNumber()); break;
             }
         }
@@ -256,6 +268,7 @@ public:
             radio.allNotesOff();
             lur.allNotesOff();
             lut.allNotesOff();
+            pump.allNotesOff();
         }
         else if (m.isSustainPedalOn() || m.isSustainPedalOff())
         {
@@ -281,6 +294,7 @@ public:
             case Chamber::Radiomasten:  radio.render (left, numSamples); break;
             case Chamber::Lurblasaren:  lur.render (left, numSamples); break;
             case Chamber::Lutverket:    lut.render (left, numSamples); break;
+            case Chamber::Vattenpumpen: pump.render (left, numSamples); break;
             case Chamber::Basmalen:     basmalen.render (left, numSamples); break;
         }
         kaos.process (left, numSamples);
@@ -325,6 +339,7 @@ private:
     Radiomasten radio;
     Lurblasaren lur;
     Lutverket lut;
+    Vattenpumpen pump;
     KrangDistortion distortion;
     AngFilter filter;
     Kaosmotorn kaos;

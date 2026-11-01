@@ -131,6 +131,16 @@ namespace id
     inline constexpr auto ltBody      = "ltBody";
     inline constexpr auto ltDamper    = "ltDamper";
 
+    inline constexpr auto vpType      = "vpType";
+    inline constexpr auto vpPressure  = "vpPressure";
+    inline constexpr auto vpSpeed     = "vpSpeed";
+    inline constexpr auto vpWater     = "vpWater";
+    inline constexpr auto vpVibrato   = "vpVibrato";
+    inline constexpr auto vpGlide     = "vpGlide";
+    inline constexpr auto vpRust      = "vpRust";
+    inline constexpr auto vpAttack    = "vpAttack";
+    inline constexpr auto vpRelease   = "vpRelease";
+
     inline constexpr auto kaAmount    = "kaAmount";
     inline constexpr auto kaSync      = "kaSync";
     inline constexpr auto kaRate      = "kaRate";
@@ -195,7 +205,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::chamber, 1 }, "Kammare",
                                                          StringArray { String::fromUTF8 ("Basmålen"), "Hammarverket", "Bordunorgeln", "Spolslingan", String::fromUTF8 ("Stålpiano"), "Klockgjuteriet",
                                                                        String::fromUTF8 ("Kören i schaktet"), "Radiomasten",
-                                                                       String::fromUTF8 ("Lurblåsaren"), "Lutverket" }, 0));
+                                                                       String::fromUTF8 ("Lurblåsaren"), "Lutverket", "Vattenpumpen" }, 0));
 
     // Basmålen – oscillatorer
     add (id::osc1Level, "Osc 1 Sågtand", { 0.0f, 1.0f }, 0.8f);
@@ -362,6 +372,23 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     add (id::ltBuzz,   "Surr",        { 0.0f, 1.0f }, 0.0f);
     add (id::ltCourse, "Kör",         { 0.0f, 20.0f }, 4.0f, "ct");
     add (id::ltBody,   "Klanglåda",   { 0.0f, 1.0f }, 0.4f);
+
+    // Vattenpumpen
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::vpType, 1 }, "Metall",
+                                                         StringArray { "Vattenfon", String::fromUTF8 ("Såg"), String::fromUTF8 ("Plåt"), "Cymbal" }, 0));
+    add (id::vpPressure, "Stråktryck", { 0.0f, 1.0f }, 0.5f);
+    add (id::vpSpeed,    "Stråkfart",  { 0.0f, 1.0f }, 0.7f);
+    add (id::vpWater,    "Vatten",     { 0.0f, 1.0f }, 0.4f);
+    add (id::vpVibrato,  "Metallvibrato", { 0.0f, 1.0f }, 0.2f);
+    {
+        NormalisableRange<float> g (0.0f, 2.0f); g.setSkewForCentre (0.3f);
+        p.push_back (std::make_unique<P> (ParameterID { id::vpGlide, 1 }, "Glid", g, 0.0f,
+                                          AudioParameterFloatAttributes()
+                                              .withStringFromValueFunction ([] (float v, int) { return v < 0.01f ? String ("Av") : String (v, 2) + " s"; })));
+    }
+    add (id::vpRust,     "Skrot",      { 0.0f, 1.0f }, 0.0f);
+    add (id::vpAttack,   "Stråkens insats",  time (4.0f), 0.3f, "s");
+    add (id::vpRelease,  "Stråkens avklang", time (6.0f), 1.0f, "s");
 
     // Kaosmotorn
     p.push_back (std::make_unique<P> (ParameterID { id::kaAmount, 1 }, "Kaos", NormalisableRange<float> (0.0f, 1.0f), 0.0f,
@@ -612,6 +639,17 @@ public:
         lt.courseCents = v (id::ltCourse);
         lt.body        = v (id::ltBody);
         lt.damperSec   = v (id::ltDamper);
+
+        auto& vp = e.pump;
+        vp.type       = (BowedType) (int) v (id::vpType);
+        vp.pressure   = v (id::vpPressure);
+        vp.speed      = v (id::vpSpeed);
+        vp.water      = v (id::vpWater);
+        vp.vibrato    = v (id::vpVibrato);
+        vp.glideSec   = v (id::vpGlide);
+        vp.rust       = v (id::vpRust);
+        vp.attackSec  = v (id::vpAttack);
+        vp.releaseSec = v (id::vpRelease);
 
         e.kaos.amount  = v (id::kaAmount);
         e.kaos.sync    = (int) v (id::kaSync);

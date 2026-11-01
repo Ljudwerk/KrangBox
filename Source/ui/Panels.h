@@ -1124,6 +1124,163 @@ private:
     textures::BackgroundCache background;
 };
 
+// --- Vattenpumpen ----------------------------------------------------------------
+
+class VattenpumpenPanel : public juce::Component
+{
+public:
+    VattenpumpenPanel()
+    {
+        for (auto* c : std::initializer_list<juce::Component*> { &type, &pressure, &speed, &water, &vibrato, &glide, &rust, &attack, &release })
+            addAndMakeVisible (c);
+        type.onChange = [this] { repaint (visArea); };
+        water.slider.onValueChange = [this] { repaint (visArea); };
+        rust.slider.onValueChange = [this] { repaint (visArea); };
+        pressure.slider.onValueChange = [this] { repaint (visArea); };
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+        paintInstrument (g);
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
+        for (auto& [r, title] : frames)
+            drawModuleFrame (g, r.toFloat(), title);
+        g.setColour (colours::brass);
+        g.setFont (panelFont (10.0f, false));
+        g.drawText ("METALL", type.getBounds().translated (0, -14).withHeight (12), juce::Justification::centredLeft);
+    }
+
+    void resized() override
+    {
+        background.invalidate();
+        frames.clear();
+        auto r = getLocalBounds().reduced (12, 10);
+        auto bowF = r.removeFromLeft (300);   r.removeFromLeft (12);
+        auto metF = r.removeFromLeft (400);   r.removeFromLeft (12);
+        auto toneF = r.removeFromLeft (210);  r.removeFromLeft (12);
+        auto vis = r;
+        frames = { { bowF, juce::String::fromUTF8 ("Stråken") }, { metF, "Metallen" }, { toneF, "Tonen" }, { vis, "Pumphuset" } };
+
+        auto knobRow = [] (juce::Rectangle<int> f) { return f.withTrimmedTop (28 + 60).withHeight (150).reduced (6, 0); };
+        type.setBounds (bowF.withTrimmedTop (28 + 26).withHeight (26).withSizeKeepingCentre (170, 26));
+        layoutRow (knobRow (bowF), { &pressure, &speed }, 100);
+        layoutRow (knobRow (metF), { &water, &vibrato, &glide, &rust }, 92);
+        layoutRow (knobRow (toneF), { &attack, &release }, 96);
+        visArea = vis.withTrimmedTop (34).reduced (12, 10);
+    }
+
+    Bindings bindings()
+    {
+        return { { { &pressure.slider, "vpPressure" }, { &speed.slider, "vpSpeed" }, { &water.slider, "vpWater" },
+                   { &vibrato.slider, "vpVibrato" }, { &glide.slider, "vpGlide" }, { &rust.slider, "vpRust" },
+                   { &attack.slider, "vpAttack" }, { &release.slider, "vpRelease" } },
+                 { { &type, "vpType" } } };
+    }
+
+private:
+    // Pumphuset: vattenfonen med sina stavar, sågen, plåten eller cymbalen – och stråken som drar över metallen.
+    void paintInstrument (juce::Graphics& g)
+    {
+        using namespace juce;
+        if (visArea.isEmpty()) return;
+        const auto a = visArea.toFloat();
+        const int t = jmax (0, type.getSelectedItemIndex());
+        const float waterAmt = (float) water.slider.valueToProportionOfLength (water.slider.getValue());
+        const float rustAmt = (float) rust.slider.valueToProportionOfLength (rust.slider.getValue());
+        const float press = (float) pressure.slider.valueToProportionOfLength (pressure.slider.getValue());
+        const float cx = a.getCentreX(), cy = a.getCentreY();
+        const auto steel = Colour (0xffb9bdc2).interpolatedWith (Colour (0xff8a4a22), rustAmt * 0.7f);
+        Rectangle<float> bounds;
+
+        if (t == 0) // vattenfon: rund behållare med stavar runt kanten
+        {
+            const float rx = jmin (a.getWidth(), a.getHeight()) * 0.34f;
+            for (int i = 0; i < 9; ++i)
+            {
+                const float ang = MathConstants<float>::pi * (0.15f + 0.7f * (float) i / 8.0f);
+                const float len = rx * (0.7f + 0.5f * (float) ((i * 5) % 4) / 3.0f);
+                const float x = cx - std::cos (ang) * rx;
+                g.setColour (steel);
+                g.drawLine (x, cy, x - std::cos (ang) * len * 0.3f, cy - len, 2.0f);
+            }
+            auto tank = Rectangle<float> (cx - rx, cy - rx * 0.25f, rx * 2.0f, rx * 1.1f);
+            g.setColour (steel.darker (0.2f));
+            g.fillEllipse (tank);
+            // Vattnet i behållaren, som skvalpar mer med Vatten.
+            Graphics::ScopedSaveState clip (g);
+            Path tankShape;
+            tankShape.addEllipse (tank.reduced (3.0f));
+            g.reduceClipRegion (tankShape);
+            g.setColour (Colour (0xff3a6e8a).withAlpha (0.8f));
+            Path w;
+            const float wy = tank.getCentreY() + tank.getHeight() * 0.05f;
+            w.startNewSubPath (tank.getX() + 6.0f, wy);
+            for (float x = tank.getX() + 6.0f; x <= tank.getRight() - 6.0f; x += 4.0f)
+                w.lineTo (x, wy + std::sin (x * 0.15f) * 3.0f * waterAmt);
+            w.lineTo (tank.getRight() - 10.0f, tank.getBottom() - 8.0f);
+            w.lineTo (tank.getX() + 10.0f, tank.getBottom() - 8.0f);
+            w.closeSubPath();
+            g.fillPath (w);
+            bounds = tank.withTop (cy - rx); // klippningen släpps när blocket tar slut
+        }
+        else if (t == 1) // såg: ett krökt blad med handtag
+        {
+            Path blade;
+            blade.startNewSubPath (cx - a.getWidth() * 0.35f, cy + 30.0f);
+            blade.quadraticTo (cx, cy - 50.0f, cx + a.getWidth() * 0.35f, cy - 10.0f);
+            blade.lineTo (cx + a.getWidth() * 0.35f, cy + 6.0f);
+            blade.quadraticTo (cx, cy - 26.0f, cx - a.getWidth() * 0.35f, cy + 44.0f);
+            blade.closeSubPath();
+            g.setColour (steel);
+            g.fillPath (blade);
+            g.setColour (Colour (0xff6b4423));
+            g.fillRoundedRectangle (cx - a.getWidth() * 0.45f, cy + 26.0f, 26.0f, 22.0f, 5.0f);
+            bounds = blade.getBounds();
+        }
+        else if (t == 2) // plåt i två kedjor
+        {
+            bounds = Rectangle<float> (cx - a.getWidth() * 0.35f, a.getY() + 24.0f, a.getWidth() * 0.7f, a.getHeight() * 0.7f);
+            g.setColour (colours::brassDark);
+            g.drawLine (bounds.getX() + 10.0f, a.getY(), bounds.getX() + 10.0f, bounds.getY(), 1.5f);
+            g.drawLine (bounds.getRight() - 10.0f, a.getY(), bounds.getRight() - 10.0f, bounds.getY(), 1.5f);
+            ColourGradient grad (steel.brighter (0.2f), bounds.getX(), bounds.getY(), steel.darker (0.4f), bounds.getRight(), bounds.getBottom(), false);
+            g.setGradientFill (grad);
+            g.fillRect (bounds);
+        }
+        else // cymbal
+        {
+            bounds = Rectangle<float> (cx - a.getWidth() * 0.38f, cy - 18.0f, a.getWidth() * 0.76f, 36.0f);
+            ColourGradient grad (colours::brassLight, bounds.getX(), bounds.getY(), colours::brassDark, bounds.getRight(), bounds.getBottom(), false);
+            g.setGradientFill (grad);
+            g.fillEllipse (bounds);
+            g.setColour (colours::brassDark);
+            g.fillEllipse (bounds.withSizeKeepingCentre (14.0f, 7.0f));
+        }
+        if (rustAmt > 0.05f)
+            textures::fill (g, bounds, textures::rust(), 0.35f * rustAmt, 0.0f);
+
+        // Stråken: trä och tagel, mot metallens kant; mer tryck ger en tydligare böjd stråke.
+        const float bx = bounds.getRight() - 8.0f, by = bounds.getY() + 6.0f;
+        g.setColour (Colour (0xff4a2c14));
+        g.drawLine (bx - 50.0f, by - 30.0f, bx + 20.0f, by + 40.0f, 3.0f);
+        g.setColour (Colour (0xffeee6d0).withAlpha (0.9f));
+        g.drawLine (bx - 46.0f + 4.0f * press, by - 26.0f, bx + 22.0f + 4.0f * press, by + 34.0f, 1.2f);
+    }
+
+    juce::ComboBox type;
+    static juce::String u8 (const char* s) { return juce::String::fromUTF8 (s); }
+    KrangKnob pressure { "Tryck" }, speed { "Fart" }, water { "Vatten" }, vibrato { "Vibrato" }, glide { "Glid" },
+              rust { "Skrot" }, attack { "Insats" }, release { "Avklang" };
+    std::vector<std::pair<juce::Rectangle<int>, juce::String>> frames;
+    juce::Rectangle<int> visArea;
+    textures::BackgroundCache background;
+};
+
 // --- Spolslingan ----------------------------------------------------------------
 
 class SpolslinganPanel : public juce::Component

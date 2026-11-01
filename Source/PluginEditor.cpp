@@ -29,6 +29,7 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     content.addChildComponent (radio);
     content.addChildComponent (lur);
     content.addChildComponent (lut);
+    content.addChildComponent (pump);
 
     bindAll();
 
@@ -94,7 +95,7 @@ void KrangBoxEditor::bindAll()
     bindSlider (top.master.slider, id::master);
     bindSlider (top.lever.slider, id::krang);
 
-    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), stalpiano.bindings(), klockor.bindings(), koren.bindings(), radio.bindings(), lur.bindings(), lut.bindings(), angledningen.bindings(), kaos.bindings() })
+    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), stalpiano.bindings(), klockor.bindings(), koren.bindings(), radio.bindings(), lur.bindings(), lut.bindings(), pump.bindings(), angledningen.bindings(), kaos.bindings() })
     {
         for (auto& [slider, paramId] : bindings.sliders) bindSlider (*slider, paramId);
         for (auto& [combo, paramId] : bindings.combos)   bindCombo (*combo, paramId);
@@ -166,6 +167,7 @@ void KrangBoxEditor::layoutContent()
     radio.setBounds (chamberArea);
     lur.setBounds (chamberArea);
     lut.setBounds (chamberArea);
+    pump.setBounds (chamberArea);
     angledningen.setBounds (r.removeFromTop (angledningHeight));
     kaos.setBounds (r.removeFromTop (kaosHeight));
 
@@ -293,6 +295,7 @@ void KrangBoxEditor::timerCallback()
         radio.setVisible (chamber == 7);
         lur.setVisible (chamber == 8);
         lut.setVisible (chamber == 9);
+        pump.setVisible (chamber == 10);
     }
 
     // Presetbyte från DAW:en (programlistan) eller nästa/föregående: följ med i listan.

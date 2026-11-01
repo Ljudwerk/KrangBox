@@ -48,6 +48,7 @@ private:
     krang::ui::RadiomastenPanel radio;
     krang::ui::LurblasarenPanel lur;
     krang::ui::LutverketPanel lut;
+    krang::ui::VattenpumpenPanel pump;
     krang::ui::AngledningenPanel angledningen;
     krang::ui::KaosPanel kaos;
 
