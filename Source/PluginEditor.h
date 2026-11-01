@@ -46,6 +46,8 @@ private:
     krang::ui::KlockgjuterietPanel klockor;
     krang::ui::KorenPanel koren;
     krang::ui::RadiomastenPanel radio;
+    krang::ui::LurblasarenPanel lur;
+    krang::ui::LutverketPanel lut;
     krang::ui::AngledningenPanel angledningen;
     krang::ui::KaosPanel kaos;
 

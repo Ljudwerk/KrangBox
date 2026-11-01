@@ -35,7 +35,9 @@ namespace mode
     constexpr float hall = 0, platta = 1, rostigTank = 2;
     constexpr float stalpiano = 4;
     constexpr float pianoLage = 0, hackbrade = 1, preparerat = 2;
-    constexpr float klockgjuteriet = 5, koren = 6, radiomasten = 7;
+    constexpr float klockgjuteriet = 5, koren = 6, radiomasten = 7, lurblasaren = 8, lutverket = 9;
+    constexpr float kantele = 0, luta = 1, cittra = 2, rostharpa = 3;
+    constexpr float naverlur = 0, bockhorn = 1, skalmeja = 2, angvissla = 3;
     constexpr float kortvag = 0, morse = 1, vindLedningar = 2, interferens = 3;
     constexpr float mansroster = 0, kvinnoroster = 1, blandadKor = 2, kulning = 3;
     constexpr float kyrkklocka = 0, skalla = 1, gong = 2, rals = 3, skalklocka = 4;
@@ -326,6 +328,58 @@ inline const std::vector<FactoryPreset>& factoryPresets()
           { { "chamber", radiomasten }, { "raMode", kortvag }, { "raStorm", 0.9f }, { "raFading", 0.8f }, { "raNoise", 0.6f },
             { "distMix", 0.1f }, { "kaAmount", 0.2f }, { "kaStutter", 0.2f }, { "kaReverse", 0.1f }, { "kaCrush", 0.8f },
             { "rvbMode", rostigTank }, { "rvbMix", 0.3f } }, {} },
+
+        // ------------------------------------------------------------------ Blås
+        { "Init Lurblåsaren", "Blås",
+          { { "chamber", lurblasaren }, { "distMix", 0.1f }, { "distDrive", 8.0f }, { "rvbMix", 0.25f } }, {} },
+
+        { "Vallåten", "Blås",
+          { { "chamber", lurblasaren }, { "luType", naverlur }, { "luNatural", 1.0f }, { "luKey", 2.0f }, { "luBreath", 0.6f },
+            { "luVibrato", 0.15f }, { "luAttack", 0.15f }, { "distMix", 0.0f },
+            { "ecSync", 1.0f }, { "ecFeedback", 0.3f }, { "ecMix", 0.2f }, { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbSize", 0.9f } }, {} },
+
+        { "Bockhornet", "Blås",
+          { { "chamber", lurblasaren }, { "master", 2.0f }, { "luType", bockhorn }, { "luRasp", 0.4f }, { "luBreath", 0.8f }, { "luNoise", 0.3f },
+            { "distMix", 0.1f }, { "rvbMode", platta }, { "rvbMix", 0.2f } }, {} },
+
+        { "Skalmejan i gränden", "Blås",
+          { { "chamber", lurblasaren }, { "luType", skalmeja }, { "luTension", 0.6f }, { "luVibrato", 0.25f }, { "luRasp", 0.2f },
+            { "distMix", 0.15f }, { "tpAge", 0.3f }, { "rvbMode", hall }, { "rvbMix", 0.25f } }, {} },
+
+        { "Ångvisslan i hamnen", "Blås",
+          { { "chamber", lurblasaren }, { "luType", angvissla }, { "luBreath", 0.9f }, { "luTension", 0.35f }, { "luNoise", 0.4f },
+            { "luAttack", 0.3f }, { "luRelease", 0.8f }, { "distMix", 0.0f },
+            { "ecSync", 2.0f }, { "ecFeedback", 0.45f }, { "ecDark", 0.6f }, { "ecMix", 0.3f }, { "rvbMode", hall }, { "rvbMix", 0.5f } }, {} },
+
+        { "Rostiga luren", "Blås",
+          { { "chamber", lurblasaren }, { "luType", naverlur }, { "luRasp", 0.8f }, { "luBreath", 0.9f }, { "luNoise", 0.5f },
+            { "distMode", fuzz }, { "distDrive", 14.0f }, { "distMix", 0.4f }, { "tpWow", 0.3f }, { "tpAge", 0.5f },
+            { "rvbMode", rostigTank }, { "rvbMix", 0.3f } }, {} },
+
+        // ------------------------------------------------------------------ Strängar
+        { "Init Lutverket", "Strängar",
+          { { "chamber", lutverket }, { "master", 2.5f }, { "distMix", 0.1f }, { "distDrive", 8.0f }, { "rvbMix", 0.2f } }, {} },
+
+        { "Kantelen vid elden", "Strängar",
+          { { "chamber", lutverket }, { "master", 2.0f }, { "ltType", kantele }, { "ltDecay", 8.0f }, { "ltDamper", 1.5f }, { "ltPos", 0.15f },
+            { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        { "Lutan i tornet", "Strängar",
+          { { "chamber", lutverket }, { "master", 3.5f }, { "ltType", luta }, { "ltDecay", 9.0f }, { "ltHard", 0.35f }, { "ltBright", 0.45f }, { "ltCourse", 5.0f },
+            { "ltBody", 0.7f }, { "distMix", 0.0f }, { "tpAge", 0.2f }, { "rvbMode", hall }, { "rvbMix", 0.35f } }, {} },
+
+        { "Cittrans regn", "Strängar",
+          { { "chamber", lutverket }, { "ltType", cittra }, { "ltDecay", 10.0f }, { "ltDamper", 2.0f }, { "ltCourse", 7.0f },
+            { "distMix", 0.0f }, { "ecSync", 3.0f }, { "ecFeedback", 0.45f }, { "ecMix", 0.25f }, { "rvbMode", platta }, { "rvbMix", 0.3f } }, {} },
+
+        { "Rostharpan", "Strängar",
+          { { "chamber", lutverket }, { "master", 5.0f }, { "ltType", rostharpa }, { "ltDecay", 9.0f }, { "ltBuzz", 0.5f }, { "ltHard", 0.7f }, { "ltCourse", 9.0f },
+            { "distMode", ror }, { "distDrive", 12.0f }, { "distMix", 0.3f }, { "rvbMode", rostigTank }, { "rvbMix", 0.3f } }, {} },
+
+        { "Plockslinga i ruinen", "Strängar",
+          { { "chamber", lutverket }, { "master", 2.5f }, { "ltType", kantele }, { "ltHard", 0.8f }, { "ltDecay", 6.0f }, { "ltBuzz", 0.2f },
+            { "distMix", 0.15f }, { "kaAmount", 0.25f }, { "kaStutter", 0.7f }, { "kaReverse", 0.4f }, { "kaCrush", 0.0f },
+            { "ecSync", 2.0f }, { "ecMix", 0.2f }, { "rvbMode", hall }, { "rvbMix", 0.25f } }, {} },
 
         // ------------------------------------------------------------------ Trummor
         { "Init Hammarverket", "Trummor", { { "chamber", hammarverket } },

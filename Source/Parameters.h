@@ -110,6 +110,27 @@ namespace id
     inline constexpr auto raAttack    = "raAttack";
     inline constexpr auto raRelease   = "raRelease";
 
+    inline constexpr auto luType      = "luType";
+    inline constexpr auto luBreath    = "luBreath";
+    inline constexpr auto luTension   = "luTension";
+    inline constexpr auto luNoise     = "luNoise";
+    inline constexpr auto luVibrato   = "luVibrato";
+    inline constexpr auto luRasp      = "luRasp";
+    inline constexpr auto luNatural   = "luNatural";
+    inline constexpr auto luKey       = "luKey";
+    inline constexpr auto luAttack    = "luAttack";
+    inline constexpr auto luRelease   = "luRelease";
+
+    inline constexpr auto ltType      = "ltType";
+    inline constexpr auto ltPos       = "ltPos";
+    inline constexpr auto ltHard      = "ltHard";
+    inline constexpr auto ltDecay     = "ltDecay";
+    inline constexpr auto ltBright    = "ltBright";
+    inline constexpr auto ltBuzz      = "ltBuzz";
+    inline constexpr auto ltCourse    = "ltCourse";
+    inline constexpr auto ltBody      = "ltBody";
+    inline constexpr auto ltDamper    = "ltDamper";
+
     inline constexpr auto kaAmount    = "kaAmount";
     inline constexpr auto kaSync      = "kaSync";
     inline constexpr auto kaRate      = "kaRate";
@@ -173,7 +194,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // Kammare
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::chamber, 1 }, "Kammare",
                                                          StringArray { String::fromUTF8 ("Basmålen"), "Hammarverket", "Bordunorgeln", "Spolslingan", String::fromUTF8 ("Stålpiano"), "Klockgjuteriet",
-                                                                       String::fromUTF8 ("Kören i schaktet"), "Radiomasten" }, 0));
+                                                                       String::fromUTF8 ("Kören i schaktet"), "Radiomasten",
+                                                                       String::fromUTF8 ("Lurblåsaren"), "Lutverket" }, 0));
 
     // Basmålen – oscillatorer
     add (id::osc1Level, "Osc 1 Sågtand", { 0.0f, 1.0f }, 0.8f);
@@ -302,6 +324,44 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     add (id::raStorm,     "Storm",        { 0.0f, 1.0f }, 0.2f);
     add (id::raAttack,    "Radions insats",  time (4.0f), 0.05f, "s");
     add (id::raRelease,   "Radions avklang", time (6.0f), 0.6f, "s");
+
+    // Lurblåsaren
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::luType, 1 }, String::fromUTF8 ("Blåsinstrument"),
+                                                         StringArray { String::fromUTF8 ("Näverlur"), "Bockhorn", "Skalmeja",
+                                                                       String::fromUTF8 ("Ångvissla") }, 0));
+    add (id::luBreath,  "Blåstryck",  { 0.0f, 1.0f }, 0.7f);
+    add (id::luTension, "Läppspänning", { 0.0f, 1.0f }, 0.5f);
+    add (id::luNoise,   "Lurandning", { 0.0f, 1.0f }, 0.2f);
+    add (id::luVibrato, "Lurvibrato", { 0.0f, 1.0f }, 0.2f);
+    add (id::luRasp,    "Rasp",       { 0.0f, 1.0f }, 0.1f);
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::luNatural, 1 }, "Naturtoner",
+                                                         StringArray { "Av", String::fromUTF8 ("På") }, 0));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::luKey, 1 }, "Lurens ton",
+                                                         StringArray { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H" }, 2));
+    add (id::luAttack,  "Lurens insats",  time (2.0f), 0.08f, "s");
+    add (id::luRelease, "Lurens avklang", time (3.0f), 0.25f, "s");
+
+    // Lutverket
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::ltType, 1 }, "Stränginstrument",
+                                                         StringArray { "Kantele", "Luta", "Cittra", "Rostharpa" }, 0));
+    p.push_back (std::make_unique<P> (ParameterID { id::ltPos, 1 }, String::fromUTF8 ("Knäppunkt"), NormalisableRange<float> (0.05f, 0.5f), 0.2f,
+                                      AudioParameterFloatAttributes().withLabel ("%")
+                                          .withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)); })));
+    add (id::ltHard,   "Knäpphårdhet", { 0.0f, 1.0f }, 0.5f);
+    {
+        NormalisableRange<float> d (0.3f, 20.0f); d.setSkewForCentre (4.0f);
+        p.push_back (std::make_unique<P> (ParameterID { id::ltDecay, 1 }, String::fromUTF8 ("Strängarnas klingtid"), d, 4.0f,
+                                          AudioParameterFloatAttributes().withLabel ("s")
+                                              .withStringFromValueFunction ([] (float v, int) { return String (v, 1); })));
+        NormalisableRange<float> m (0.03f, 3.0f); m.setSkewForCentre (0.3f);
+        p.push_back (std::make_unique<P> (ParameterID { id::ltDamper, 1 }, String::fromUTF8 ("Strängdämpare"), m, 0.25f,
+                                          AudioParameterFloatAttributes().withLabel ("s")
+                                              .withStringFromValueFunction ([] (float v, int) { return String (v, 2); })));
+    }
+    add (id::ltBright, "Glans",       { 0.0f, 1.0f }, 0.6f);
+    add (id::ltBuzz,   "Surr",        { 0.0f, 1.0f }, 0.0f);
+    add (id::ltCourse, "Kör",         { 0.0f, 20.0f }, 4.0f, "ct");
+    add (id::ltBody,   "Klanglåda",   { 0.0f, 1.0f }, 0.4f);
 
     // Kaosmotorn
     p.push_back (std::make_unique<P> (ParameterID { id::kaAmount, 1 }, "Kaos", NormalisableRange<float> (0.0f, 1.0f), 0.0f,
@@ -529,6 +589,29 @@ public:
         ra.storm      = v (id::raStorm);
         ra.attackSec  = v (id::raAttack);
         ra.releaseSec = v (id::raRelease);
+
+        auto& lu = e.lur;
+        lu.type       = (WindType) (int) v (id::luType);
+        lu.breath     = v (id::luBreath);
+        lu.tension    = v (id::luTension);
+        lu.noise      = v (id::luNoise);
+        lu.vibrato    = v (id::luVibrato);
+        lu.rasp       = v (id::luRasp);
+        lu.natural    = v (id::luNatural) > 0.5f;
+        lu.key        = (int) v (id::luKey);
+        lu.attackSec  = v (id::luAttack);
+        lu.releaseSec = v (id::luRelease);
+
+        auto& lt = e.lut;
+        lt.type        = (LuteType) (int) v (id::ltType);
+        lt.pluckPos    = v (id::ltPos);
+        lt.hardness    = v (id::ltHard);
+        lt.decaySec    = v (id::ltDecay);
+        lt.brightness  = v (id::ltBright);
+        lt.buzz        = v (id::ltBuzz);
+        lt.courseCents = v (id::ltCourse);
+        lt.body        = v (id::ltBody);
+        lt.damperSec   = v (id::ltDamper);
 
         e.kaos.amount  = v (id::kaAmount);
         e.kaos.sync    = (int) v (id::kaSync);

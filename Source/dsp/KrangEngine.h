@@ -13,6 +13,8 @@
 #include "Klockgjuteriet.h"
 #include "Koren.h"
 #include "Radiomasten.h"
+#include "Lurblasaren.h"
+#include "Lutverket.h"
 #include "Slingan.h"
 #include "KrangDistortion.h"
 #include "Stegverket.h"
@@ -24,7 +26,7 @@ namespace krang
 {
 
 // Vilken kammare (ljudmotor) som spelar. Fler tillkommer i fas 3.
-enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan, Stalpiano, Klockgjuteriet, Koren, Radiomasten };
+enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan, Stalpiano, Klockgjuteriet, Koren, Radiomasten, Lurblasaren, Lutverket };
 
 struct EngineParams
 {
@@ -37,6 +39,8 @@ struct EngineParams
     KlockgjuterietParams klockor;
     KorenParams koren;
     RadiomastenParams radio;
+    LurblasarenParams lur;
+    LutverketParams lut;
     SlinganSettings slingan;
     StegverketSettings stegverket;
     DistortionParams distortion;
@@ -96,6 +100,13 @@ inline void applyKrangspaken (EngineParams& e, float k)
     e.radio.fading  = toward (e.radio.fading, 0.7f, 0.7f);
     e.radio.drift   = toward (e.radio.drift, 0.9f, 0.6f);
 
+    e.lur.rasp    = toward (e.lur.rasp, 0.8f, 0.8f);              // luren skorrar och väser
+    e.lur.noise   = toward (e.lur.noise, 0.6f, 0.6f);
+    e.lur.vibrato = toward (e.lur.vibrato, 0.6f, 0.5f);
+
+    e.lut.buzz        = toward (e.lut.buzz, 0.7f, 0.8f);         // strängarna surrar mot rostig metall
+    e.lut.courseCents = e.lut.courseCents + 10.0f * k;
+
     e.tape.wow     = toward (e.tape.wow, 0.7f, 0.6f);
     e.tape.age     = toward (e.tape.age, 0.8f, 0.6f);
     e.tape.dropout = toward (e.tape.dropout, 0.5f, 0.5f);
@@ -126,6 +137,8 @@ public:
         klockor.prepare (sampleRate, maxBlockSize);
         koren.prepare (sampleRate, maxBlockSize);
         radio.prepare (sampleRate, maxBlockSize);
+        lur.prepare (sampleRate, maxBlockSize);
+        lut.prepare (sampleRate, maxBlockSize);
         distortion.prepare (sampleRate, maxBlockSize);
         filter.prepare (sampleRate, maxBlockSize);
         kaos.prepare (sampleRate, maxBlockSize);
@@ -149,6 +162,8 @@ public:
         klockor.reset();
         koren.reset();
         radio.reset();
+        lur.reset();
+        lut.reset();
         distortion.reset();
         filter.reset();
         kaos.reset();
@@ -172,6 +187,8 @@ public:
             klockor.allNotesOff();
             koren.allNotesOff();
             radio.allNotesOff();
+            lur.allNotesOff();
+            lut.allNotesOff();
             chamber = p.chamber;
         }
         basmalen.setParams (p.basmalen);
@@ -182,6 +199,8 @@ public:
         klockor.setParams (p.klockor);
         koren.setParams (p.koren);
         radio.setParams (p.radio, p.bpm);
+        lur.setParams (p.lur);
+        lut.setParams (p.lut);
         distortion.setParams (p.distortion);
         filter.setParams (p.filter);
         kaos.setParams (p.kaos, p.bpm);
@@ -204,6 +223,8 @@ public:
                 case Chamber::Klockgjuteriet: klockor.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Koren:        koren.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Radiomasten:  radio.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Lurblasaren:  lur.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Lutverket:    lut.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Basmalen:     basmalen.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
             }
         }
@@ -218,6 +239,8 @@ public:
                 case Chamber::Klockgjuteriet: klockor.noteOff (m.getNoteNumber()); break;
                 case Chamber::Koren:        koren.noteOff (m.getNoteNumber()); break;
                 case Chamber::Radiomasten:  radio.noteOff (m.getNoteNumber()); break;
+                case Chamber::Lurblasaren:  lur.noteOff (m.getNoteNumber()); break;
+                case Chamber::Lutverket:    lut.noteOff (m.getNoteNumber()); break;
                 case Chamber::Basmalen:     basmalen.noteOff (m.getNoteNumber()); break;
             }
         }
@@ -231,6 +254,8 @@ public:
             klockor.allNotesOff();
             koren.allNotesOff();
             radio.allNotesOff();
+            lur.allNotesOff();
+            lut.allNotesOff();
         }
         else if (m.isSustainPedalOn() || m.isSustainPedalOff())
         {
@@ -254,6 +279,8 @@ public:
             case Chamber::Klockgjuteriet: klockor.render (left, numSamples); break;
             case Chamber::Koren:        koren.render (left, numSamples); break;
             case Chamber::Radiomasten:  radio.render (left, numSamples); break;
+            case Chamber::Lurblasaren:  lur.render (left, numSamples); break;
+            case Chamber::Lutverket:    lut.render (left, numSamples); break;
             case Chamber::Basmalen:     basmalen.render (left, numSamples); break;
         }
         kaos.process (left, numSamples);
@@ -296,6 +323,8 @@ private:
     Klockgjuteriet klockor;
     Koren koren;
     Radiomasten radio;
+    Lurblasaren lur;
+    Lutverket lut;
     KrangDistortion distortion;
     AngFilter filter;
     Kaosmotorn kaos;

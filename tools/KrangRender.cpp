@@ -376,7 +376,8 @@ int main (int argc, char* argv[])
             }
             else if (p.chamber == krang::Chamber::Bordunorgeln || p.chamber == krang::Chamber::Stalpiano
                      || p.chamber == krang::Chamber::Klockgjuteriet || p.chamber == krang::Chamber::Koren
-                     || p.chamber == krang::Chamber::Radiomasten)
+                     || p.chamber == krang::Chamber::Radiomasten || p.chamber == krang::Chamber::Lurblasaren
+                     || p.chamber == krang::Chamber::Lutverket)
             {
                 midi = buildChordMidi (sr, 80.0, total);
             }
@@ -997,6 +998,211 @@ int main (int argc, char* argv[])
             std::cout << "radio_cpu: 8 stationer, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
             failures += load < 25.0 ? 0 : 1;
             failures += report ("radio_8_stationer", analyse (out), latency) ? 0 : 1;
+        }
+    }
+
+    // Lurblåsaren: varje instrument ska ljuda på rätt ton, naturtonerna ska fungera, och det ska vara stabilt i botten.
+    {
+        // Grundtonen ur ett fönster: finsökning med Hann-fönstrad DFT kring en förväntad ton.
+        auto pitchNear = [&] (const juce::AudioBuffer<float>& b, double from, double len, double expect)
+        {
+            const float* d = b.getReadPointer (0);
+            const int s0 = (int) (from * sr), n = (int) (len * sr);
+            double best = 0.0, bestHz = 0.0;
+            for (double f = expect * 0.8; f <= expect * 1.25; f += expect * 0.0005)
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; i += 2)
+                {
+                    const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+                    const double ph = juce::MathConstants<double>::twoPi * f * i / sr;
+                    re += d[s0 + i] * w * std::cos (ph);
+                    im += d[s0 + i] * w * std::sin (ph);
+                }
+                if (re * re + im * im > best) { best = re * re + im * im; bestHz = f; }
+            }
+            return bestHz;
+        };
+        const char* types[] = { "naverlur", "bockhorn", "skalmeja", "angvissla" };
+        const int notes[] = { 57, 57, 57, 69 };
+        for (int t = 0; t < 4; ++t)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Lurblasaren;
+            p.lur.type = (krang::WindType) t;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, notes[t], 0.8f), 0);
+            midi.addEvent (juce::MidiMessage::noteOff (1, notes[t]), (int) (sr * 1.5));
+            const auto out = renderEngine (p, midi, (int) (sr * 2.0), sr, blockSize, latency);
+            const double expect = 440.0 * std::pow (2.0, (notes[t] - 69) / 12.0);
+            const double hz = pitchNear (out, 0.6, 0.5, expect);
+            const double cents = 1200.0 * std::log2 (hz / expect);
+            const float level = juce::Decibels::gainToDecibels (out.getRMSLevel (0, (int) (sr * 0.6), (int) (sr * 0.5)), -120.0f);
+            const auto st = analyse (out);
+            const bool ok = std::abs (cents) < 60.0 && level > -30.0f;
+            std::cout << "lur_" << types[t] << ": " << hz << " Hz (" << cents << " cent fran tonen), nivå " << level << " dB  "
+                      << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+            failures += report ((juce::String ("lur_") + types[t]).toRawUTF8(), st, latency) ? 0 : 1;
+            writeWav (outDir.getChildFile (juce::String ("krangbox_lur_") + types[t] + ".wav"), out, sr);
+        }
+
+        // Naturtoner: en lur i D (73,4 Hz) kan bara spela sina övertoner. H3 (247 Hz) dras till tredje deltonen, A3 (220 Hz).
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Lurblasaren;
+            p.lur.type = krang::WindType::Naverlur;
+            p.lur.natural = true; p.lur.key = 2;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 59, 0.8f), 0);
+            const auto out = renderEngine (p, midi, (int) (sr * 1.2), sr, blockSize, latency);
+            const double expect = 3.0 * 440.0 * std::pow (2.0, (38 - 69) / 12.0);
+            const double hz = pitchNear (out, 0.6, 0.5, expect);
+            const bool ok = std::abs (1200.0 * std::log2 (hz / expect)) < 30.0;
+            std::cout << "lur_naturtoner: H3 i en D-lur ger " << hz << " Hz (vantat " << expect << ")  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+
+        // Allt i botten med Krangspaken, i alla fyra instrumenten: stabilt.
+        for (int t = 0; t < 4; ++t)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Lurblasaren;
+            p.lur.type = (krang::WindType) t;
+            p.lur.breath = 1.0f; p.lur.rasp = 1.0f; p.lur.tension = 1.0f; p.lur.noise = 1.0f;
+            krang::applyKrangspaken (p, 1.0f);
+            int total = 0;
+            const auto midi = buildChordMidi (sr, 80.0, total);
+            const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+            const auto st = analyse (out);
+            failures += report ((juce::String ("lur_botten_") + types[t]).toRawUTF8(), st, latency, st.rmsDb < -4.0f) ? 0 : 1;
+        }
+
+        // Sex röster samtidigt.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Lurblasaren;
+            p.lur.type = krang::WindType::Naverlur;
+            juce::MidiBuffer midi;
+            for (int n = 0; n < 6; ++n)
+                midi.addEvent (juce::MidiMessage::noteOn (1, 45 + n * 5, 0.8f), n * 64);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            std::cout << "lur_cpu: 6 roster, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ("lur_6_roster", analyse (out), latency) ? 0 : 1;
+        }
+    }
+
+    // Lutverket: varje instrument på rätt ton, dämparen, surr i botten och CPU.
+    {
+        auto pitchNear = [&] (const juce::AudioBuffer<float>& b, double from, double len, double expect)
+        {
+            const float* d = b.getReadPointer (0);
+            const int s0 = (int) (from * sr), n = (int) (len * sr);
+            double best = 0.0, bestHz = 0.0;
+            for (double f = expect * 0.9; f <= expect * 1.1; f += expect * 0.0002)
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; i += 2)
+                {
+                    const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+                    const double ph = juce::MathConstants<double>::twoPi * f * i / sr;
+                    re += d[s0 + i] * w * std::cos (ph);
+                    im += d[s0 + i] * w * std::sin (ph);
+                }
+                if (re * re + im * im > best) { best = re * re + im * im; bestHz = f; }
+            }
+            return bestHz;
+        };
+        const char* types[] = { "kantele", "luta", "cittra", "rostharpa" };
+        for (int t = 0; t < 4; ++t)
+        {
+            for (int note : { 45, 69, 88 })
+            {
+                krang::EngineParams p;
+                p.chamber = krang::Chamber::Lutverket;
+                p.lut.type = (krang::LuteType) t;
+                p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+                juce::MidiBuffer midi;
+                midi.addEvent (juce::MidiMessage::noteOn (1, note, 0.8f), 0);
+                const auto out = renderEngine (p, midi, (int) (sr * 0.8), sr, blockSize, latency);
+                const double expect = 440.0 * std::pow (2.0, (note - 69) / 12.0);
+                const double hz = pitchNear (out, 0.05, 0.4, expect);
+                const double cents = 1200.0 * std::log2 (hz / expect);
+                const bool ok = std::abs (cents) < (t == 3 ? 25.0 : 10.0); // rostharpan vinglar med flit
+                std::cout << "lut_" << types[t] << "_" << note << ": " << hz << " Hz (" << cents << " cent)  " << (ok ? "OK" : "FEL") << "\n";
+                failures += ok ? 0 : 1;
+            }
+            // En slinga plockade toner, till WAV.
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Lutverket;
+            p.lut.type = (krang::LuteType) t;
+            p.distortion.mix = 0.0f;
+            juce::MidiBuffer midi;
+            const int notes[] = { 50, 57, 62, 65, 69, 65, 62, 57, 50, 57, 62, 64, 65, 64, 62, 57 };
+            const int step = (int) (sr * 0.2);
+            for (int i = 0; i < 16; ++i)
+            {
+                midi.addEvent (juce::MidiMessage::noteOn (1, notes[i], 0.6f + 0.3f * (float) (i % 4 == 0)), i * step);
+                midi.addEvent (juce::MidiMessage::noteOff (1, notes[i]), i * step + step * 3);
+            }
+            const auto out = renderEngine (p, midi, 16 * step + (int) (sr * 2.0), sr, blockSize, latency);
+            failures += report ((juce::String ("lut_") + types[t]).toRawUTF8(), analyse (out), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile (juce::String ("krangbox_lut_") + types[t] + ".wav"), out, sr);
+        }
+
+        // Dämparen: en släppt ton tystnar, en hållen klingar vidare.
+        auto tailDb = [&] (bool hold)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Lutverket;
+            p.lut.decaySec = 8.0f;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, 0.8f), 0);
+            if (! hold) midi.addEvent (juce::MidiMessage::noteOff (1, 60), (int) (sr * 0.3));
+            const auto out = renderEngine (p, midi, (int) (sr * 1.5), sr, blockSize, latency);
+            return juce::Decibels::gainToDecibels (out.getRMSLevel (0, (int) (sr * 1.0), (int) (sr * 0.5)), -150.0f);
+        };
+        const float released = tailDb (false), held = tailDb (true);
+        const bool damperOk = released < held - 30.0f;
+        std::cout << "lut_dampare: slappt " << released << " dB, hallen " << held << " dB  " << (damperOk ? "OK" : "FEL") << "\n";
+        failures += damperOk ? 0 : 1;
+
+        // Surr i botten med Krangspaken, i alla instrument.
+        for (int t = 0; t < 4; ++t)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Lutverket;
+            p.lut.type = (krang::LuteType) t;
+            p.lut.buzz = 1.0f; p.lut.hardness = 1.0f; p.lut.decaySec = 20.0f; p.lut.brightness = 1.0f;
+            krang::applyKrangspaken (p, 1.0f);
+            int total = 0;
+            const auto midi = buildChordMidi (sr, 80.0, total);
+            const auto out = renderEngine (p, midi, total, sr, blockSize, latency);
+            const auto st = analyse (out);
+            failures += report ((juce::String ("lut_botten_") + types[t]).toRawUTF8(), st, latency, st.rmsDb < -4.0f) ? 0 : 1;
+        }
+
+        // Tolv toner i cittran (tre strängar per ton = 36 strängar).
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Lutverket;
+            p.lut.type = krang::LuteType::Cittra;
+            p.lut.decaySec = 20.0f;
+            juce::MidiBuffer midi;
+            for (int n = 0; n < 12; ++n)
+                midi.addEvent (juce::MidiMessage::noteOn (1, 40 + n * 3, 0.8f), n * 64);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            std::cout << "lut_cpu: 36 strangar, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ("lut_36_strangar", analyse (out), latency) ? 0 : 1;
         }
     }
 

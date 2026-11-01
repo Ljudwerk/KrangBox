@@ -840,6 +840,290 @@ private:
     textures::BackgroundCache background;
 };
 
+// --- Lurblåsaren ------------------------------------------------------------------
+
+class LurblasarenPanel : public juce::Component
+{
+public:
+    LurblasarenPanel()
+    {
+        for (auto* c : std::initializer_list<juce::Component*> { &type, &natural, &key, &breath, &tension, &rasp,
+                                                                 &noise, &vibrato, &attack, &release })
+            addAndMakeVisible (c);
+        type.onChange = [this] { repaint (hornArea); };
+        rasp.slider.onValueChange = [this] { repaint (hornArea); };
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+        paintInstrument (g);
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
+        for (auto& [r, title] : frames)
+            drawModuleFrame (g, r.toFloat(), title);
+        g.setColour (colours::brass);
+        g.setFont (panelFont (10.0f, false));
+        g.drawText ("INSTRUMENT", type.getBounds().translated (0, -14).withHeight (12), juce::Justification::centredLeft);
+        g.drawText ("NATURTONER", natural.getBounds().translated (0, -14).withHeight (12), juce::Justification::centredLeft);
+        g.drawText ("LURENS TON", key.getBounds().translated (0, -14).withHeight (12), juce::Justification::centredLeft);
+    }
+
+    void resized() override
+    {
+        background.invalidate();
+        frames.clear();
+        auto r = getLocalBounds().reduced (12, 10);
+        auto inst = r.removeFromLeft (250);   r.removeFromLeft (12);
+        auto mouth = r.removeFromLeft (310);  r.removeFromLeft (12);
+        auto air = r.removeFromLeft (400);    r.removeFromLeft (12);
+        auto vis = r;
+        frames = { { inst, "Instrumentet" }, { mouth, "Munstycket" }, { air, "Andetaget" }, { vis, juce::String::fromUTF8 ("Lurstället") } };
+
+        auto c = inst.withTrimmedTop (28).reduced (20, 0);
+        c.removeFromTop (30); type.setBounds (c.removeFromTop (26));
+        c.removeFromTop (34); natural.setBounds (c.removeFromTop (26));
+        c.removeFromTop (34); key.setBounds (c.removeFromTop (26));
+
+        auto knobRow = [] (juce::Rectangle<int> f) { return f.withTrimmedTop (28 + 60).withHeight (150).reduced (6, 0); };
+        layoutRow (knobRow (mouth), { &breath, &tension, &rasp }, 96);
+        layoutRow (knobRow (air), { &noise, &vibrato, &attack, &release }, 92);
+        hornArea = vis.withTrimmedTop (34).reduced (12, 10);
+    }
+
+    Bindings bindings()
+    {
+        return { { { &breath.slider, "luBreath" }, { &tension.slider, "luTension" }, { &rasp.slider, "luRasp" },
+                   { &noise.slider, "luNoise" }, { &vibrato.slider, "luVibrato" }, { &attack.slider, "luAttack" },
+                   { &release.slider, "luRelease" } },
+                 { { &type, "luType" }, { &natural, "luNatural" }, { &key, "luKey" } } };
+    }
+
+private:
+    // Lurstället: det valda instrumentet, stående – lång lur, krökt horn, skalmeja med hål eller ångvissla.
+    void paintInstrument (juce::Graphics& g)
+    {
+        using namespace juce;
+        if (hornArea.isEmpty()) return;
+        const auto a = hornArea.toFloat();
+        const int t = jmax (0, type.getSelectedItemIndex());
+        const float raspAmount = (float) rasp.slider.valueToProportionOfLength (rasp.slider.getValue());
+        const float cx = a.getCentreX();
+        Path p;
+        Colour body = Colour (0xff9a6a3a);                               // näver
+        if (t == 0) // näverlur: lång, smal och konisk
+        {
+            p.startNewSubPath (cx - 2.5f, a.getY());
+            p.lineTo (cx + 2.5f, a.getY());
+            p.lineTo (cx + 13.0f, a.getBottom());
+            p.lineTo (cx - 13.0f, a.getBottom());
+            p.closeSubPath();
+        }
+        else if (t == 1) // bockhorn: krökt horn
+        {
+            p.startNewSubPath (cx - 30.0f, a.getY() + 10.0f);
+            p.quadraticTo (cx + 40.0f, a.getY() + a.getHeight() * 0.3f, cx + 10.0f, a.getBottom() - 10.0f);
+            p.lineTo (cx - 14.0f, a.getBottom() - 18.0f);
+            p.quadraticTo (cx + 18.0f, a.getY() + a.getHeight() * 0.35f, cx - 32.0f, a.getY() + 16.0f);
+            p.closeSubPath();
+            body = Colour (0xffd9c7a0);                                 // horn
+        }
+        else if (t == 2) // skalmeja: trärör med klocka och fingerhål
+        {
+            p.addRoundedRectangle (cx - 6.0f, a.getY(), 12.0f, a.getHeight() * 0.8f, 3.0f);
+            p.startNewSubPath (cx - 6.0f, a.getY() + a.getHeight() * 0.78f);
+            p.lineTo (cx + 6.0f, a.getY() + a.getHeight() * 0.78f);
+            p.lineTo (cx + 20.0f, a.getBottom());
+            p.lineTo (cx - 20.0f, a.getBottom());
+            p.closeSubPath();
+            body = Colour (0xff6b4423);
+        }
+        else // ångvissla: mässingsvissla på ett rör
+        {
+            p.addRoundedRectangle (cx - 16.0f, a.getY() + 10.0f, 32.0f, a.getHeight() * 0.45f, 6.0f);
+            p.addRectangle (cx - 4.0f, a.getY() + 10.0f + a.getHeight() * 0.45f, 8.0f, a.getHeight() * 0.5f);
+            body = colours::brass;
+        }
+        ColourGradient grad (body.brighter (0.35f), a.getX(), a.getY(), body.darker (0.4f), a.getRight(), a.getBottom(), false);
+        g.setGradientFill (grad);
+        g.fillPath (p);
+        g.setColour (Colours::black.withAlpha (0.55f));
+        g.strokePath (p, PathStrokeType (1.0f));
+
+        if (t == 0) // näverns lindningar
+        {
+            g.setColour (Colour (0xff3a2614).withAlpha (0.7f));
+            for (int i = 1; i < 8; ++i)
+            {
+                const float y = a.getY() + a.getHeight() * (float) i / 8.0f;
+                const float w = 2.5f + 10.5f * (float) i / 8.0f;
+                g.drawLine (cx - w, y, cx + w, y, 1.2f);
+            }
+        }
+        if (t == 2) // fingerhål
+        {
+            g.setColour (Colours::black.withAlpha (0.8f));
+            for (int i = 0; i < 6; ++i)
+                g.fillEllipse (cx - 2.5f, a.getY() + 14.0f + (float) i * a.getHeight() * 0.1f, 5.0f, 5.0f);
+        }
+        if (t == 3) // ånga
+        {
+            g.setColour (Colours::white.withAlpha (0.18f));
+            for (int i = 0; i < 4; ++i)
+                g.fillEllipse (cx - 26.0f + (float) i * 16.0f, a.getY() - 4.0f - (float) (i % 2) * 6.0f, 18.0f, 14.0f);
+        }
+        if (raspAmount > 0.05f)
+            textures::fill (g, p.getBounds(), textures::rust(), 0.3f * raspAmount, 0.0f);
+    }
+
+    juce::ComboBox type, natural, key;
+    KrangKnob breath { u8 ("Blåstryck") }, tension { u8 ("Spänning") }, rasp { "Rasp" },
+              noise { "Andning" }, vibrato { "Vibrato" }, attack { "Insats" }, release { "Avklang" };
+    static juce::String u8 (const char* s) { return juce::String::fromUTF8 (s); }
+    std::vector<std::pair<juce::Rectangle<int>, juce::String>> frames;
+    juce::Rectangle<int> hornArea;
+    textures::BackgroundCache background;
+};
+
+// --- Lutverket --------------------------------------------------------------------
+
+class LutverketPanel : public juce::Component
+{
+public:
+    LutverketPanel()
+    {
+        for (auto* c : std::initializer_list<juce::Component*> { &type, &pos, &hard, &decay, &bright, &course, &damper, &buzz, &body })
+            addAndMakeVisible (c);
+        type.onChange = [this] { repaint (bodyArea); };
+        pos.slider.onValueChange = [this] { repaint (bodyArea); };
+        buzz.slider.onValueChange = [this] { repaint (bodyArea); };
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        background.draw (g, getLocalBounds(), [this] (juce::Graphics& bg) { paintBackground (bg); });
+        paintInstrument (g);
+    }
+
+    void paintBackground (juce::Graphics& g)
+    {
+        textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
+        for (auto& [r, title] : frames)
+            drawModuleFrame (g, r.toFloat(), title);
+        g.setColour (colours::brass);
+        g.setFont (panelFont (10.0f, false));
+        g.drawText ("INSTRUMENT", type.getBounds().translated (0, -14).withHeight (12), juce::Justification::centredLeft);
+    }
+
+    void resized() override
+    {
+        background.invalidate();
+        frames.clear();
+        auto r = getLocalBounds().reduced (12, 10);
+        auto pluckF = r.removeFromLeft (300);  r.removeFromLeft (12);
+        auto strF = r.removeFromLeft (400);    r.removeFromLeft (12);
+        auto boxF = r.removeFromLeft (210);    r.removeFromLeft (12);
+        auto vis = r;
+        frames = { { pluckF, juce::String::fromUTF8 ("Knäppet") }, { strF, juce::String::fromUTF8 ("Strängarna") },
+                   { boxF, juce::String::fromUTF8 ("Lådan") }, { vis, "Instrumentet" } };
+
+        auto knobRow = [] (juce::Rectangle<int> f) { return f.withTrimmedTop (28 + 60).withHeight (150).reduced (6, 0); };
+        type.setBounds (pluckF.withTrimmedTop (28 + 26).withHeight (26).withSizeKeepingCentre (170, 26));
+        layoutRow (knobRow (pluckF), { &pos, &hard }, 100);
+        layoutRow (knobRow (strF), { &decay, &bright, &course, &damper }, 92);
+        layoutRow (knobRow (boxF), { &buzz, &body }, 96);
+        bodyArea = vis.withTrimmedTop (34).reduced (12, 10);
+    }
+
+    Bindings bindings()
+    {
+        return { { { &pos.slider, "ltPos" }, { &hard.slider, "ltHard" }, { &decay.slider, "ltDecay" }, { &bright.slider, "ltBright" },
+                   { &course.slider, "ltCourse" }, { &damper.slider, "ltDamper" }, { &buzz.slider, "ltBuzz" }, { &body.slider, "ltBody" } },
+                 { { &type, "ltType" } } };
+    }
+
+private:
+    // Instrumentet ovanifrån: kantele, luta, cittra eller rostharpa, med strängarna och en markering där man knäpper.
+    void paintInstrument (juce::Graphics& g)
+    {
+        using namespace juce;
+        if (bodyArea.isEmpty()) return;
+        const auto a = bodyArea.toFloat();
+        const int t = jmax (0, type.getSelectedItemIndex());
+        const float rustAmount = (float) buzz.slider.valueToProportionOfLength (buzz.slider.getValue());
+        const float pluck = (float) pos.slider.valueToProportionOfLength (pos.slider.getValue());
+        const float cx = a.getCentreX();
+
+        Path shape;
+        Colour wood = Colour (0xff8a5a2b);
+        float top = a.getY() + 6.0f, bottom = a.getBottom() - 6.0f;
+        int strings = 5;
+        if (t == 0)      // kantele: trapets
+        {
+            shape.startNewSubPath (cx - 22.0f, top); shape.lineTo (cx + 22.0f, top);
+            shape.lineTo (cx + 46.0f, bottom); shape.lineTo (cx - 46.0f, bottom); shape.closeSubPath();
+            strings = 5;
+        }
+        else if (t == 1) // luta: päronformad kropp och hals
+        {
+            shape.addRoundedRectangle (cx - 7.0f, top, 14.0f, (bottom - top) * 0.45f, 3.0f);
+            shape.addEllipse (cx - 44.0f, top + (bottom - top) * 0.40f, 88.0f, (bottom - top) * 0.60f);
+            wood = Colour (0xffa0702f);
+            strings = 6;
+        }
+        else if (t == 2) // cittra: platt låda
+        {
+            shape.addRoundedRectangle (cx - 48.0f, top + 10.0f, 96.0f, bottom - top - 20.0f, 8.0f);
+            wood = Colour (0xff6e4424);
+            strings = 9;
+        }
+        else             // rostharpa: en järnram
+        {
+            shape.addRoundedRectangle (cx - 40.0f, top, 80.0f, bottom - top, 4.0f);
+            wood = Colour (0xff5a4a40);
+            strings = 6;
+        }
+        ColourGradient grad (wood.brighter (0.35f), a.getX(), a.getY(), wood.darker (0.45f), a.getRight(), a.getBottom(), false);
+        g.setGradientFill (grad);
+        g.fillPath (shape);
+        g.setColour (Colours::black.withAlpha (0.55f));
+        g.strokePath (shape, PathStrokeType (1.0f));
+        if (t == 1) // rosett
+        {
+            g.setColour (Colours::black.withAlpha (0.6f));
+            g.drawEllipse (cx - 12.0f, top + (bottom - top) * 0.62f, 24.0f, 24.0f, 1.2f);
+        }
+
+        // Strängarna, och var man knäpper.
+        const auto b = shape.getBounds();
+        const float sTop = b.getY() + 4.0f, sBottom = b.getBottom() - 6.0f;
+        const float width = (t == 1 ? 12.0f : b.getWidth() * 0.6f);
+        for (int i = 0; i < strings; ++i)
+        {
+            const float x = cx - width * 0.5f + width * ((float) i + 0.5f) / (float) strings;
+            const auto metal = (t == 1 ? Colour (0xffe8dcc4) : Colour (0xffc9ccd0)).interpolatedWith (Colour (0xff8a4a22), rustAmount);
+            g.setColour (metal.withAlpha (0.9f));
+            g.drawLine (x, sTop, x, sBottom, t == 1 ? 0.8f : 1.0f);
+        }
+        const float py = sBottom - (sBottom - sTop) * (0.05f + 0.9f * pluck) * 0.5f;
+        g.setColour (colours::tubeOrange);
+        g.drawLine (cx - width * 0.5f - 6.0f, py, cx + width * 0.5f + 6.0f, py, 2.0f);
+        if (rustAmount > 0.05f)
+            textures::fill (g, b, textures::rust(), 0.35f * rustAmount, 0.0f);
+    }
+
+    juce::ComboBox type;
+    static juce::String u8 (const char* s) { return juce::String::fromUTF8 (s); }
+    KrangKnob pos { u8 ("Knäpp") }, hard { u8 ("Hårdhet") }, decay { "Klingtid" }, bright { "Glans" }, course { u8 ("Kör") },
+              damper { u8 ("Dämpare") }, buzz { "Surr" }, body { "Botten" };
+    std::vector<std::pair<juce::Rectangle<int>, juce::String>> frames;
+    juce::Rectangle<int> bodyArea;
+    textures::BackgroundCache background;
+};
+
 // --- Spolslingan ----------------------------------------------------------------
 
 class SpolslinganPanel : public juce::Component
