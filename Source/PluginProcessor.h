@@ -74,6 +74,8 @@ public:
 
     // Senast spelade ton; Radiomastens skala ställer in nålen efter den.
     std::atomic<int> lastNote { -1 };
+    // Modulationskällornas senaste värden (LFO 1–2, envelope 1–2, modhjul, aftertouch, anslag) för lamporna.
+    std::array<std::atomic<float>, 7> modSources {};
 
     // Det virtuella keyboardet i gränssnittet skriver hit; noterna blandas in i MIDI-flödet.
     juce::MidiKeyboardState keyboardState;
@@ -82,9 +84,12 @@ public:
     krang::StepPattern pattern;
     krang::Stegverket stegverket;
     krang::Slingan slingan;
+    // Tonstegverket: melodin för alla kammare utom Hammarverket.
+    krang::TonPattern melody;
+    krang::TonStegverket tonverk;
 
     // Fabrikspresets och egna presets.
-    krang::PresetManager presets { state, pattern };
+    krang::PresetManager presets { state, pattern, &melody };
 
 private:
     krang::params::Reader reader { state };

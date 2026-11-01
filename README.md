@@ -28,9 +28,17 @@ Displayen visar presetets namn och den parameter du senast rörde. Dubbelklick p
 
 ### Texturer
 
-Alla texturer genereras i kod (`Source/ui/Textures.h`) med fasta frön, i dubbel upplösning så att de håller vid 160 % skala: borstad chassimetall, modulplåt med nötta partier, rost och smuts, åldrat mätarpapper med en kaffefläck, korn i VFD-glaset och svarvspår i rattarnas mässing. Statiska bakgrunder ritas en gång och sparas som bild, så en hel omritning tar ungefär 20 ms (mjukvarurendering) och vanliga uppdateringar bara en bråkdel av det.
+Alla ytor genereras i kod (`Source/ui/Textures.h`) – inga bildfiler. Varje plåt, både chassit och modulerna, ritas unikt för sin storlek i dubbel upplösning, så att inget mönster upprepas och ytan håller vid 160 % skala:
 
-**Byta mot genererade bilder (Philip):** varje textur är en funktion (`chassisMetal()`, `plate()`, `rust()`, `meterPaper()`) som returnerar en bild. Lägg en sömlös PNG, gärna 512 × 512 eller större, i `Resources/` och låt funktionen returnera den i stället; resten av gränssnittet ändras inte. `KrangSnapshot … --tid` mäter rittiden efteråt.
+- **Ljus och relief:** bucklor och borstning i en höjdkarta som belyses snett uppifrån vänster
+- **Repor:** tunna spår med mörk botten och ljus kant, de flesta längs borstningen
+- **Rost som rinner** nedåt från skruvarna och samlas i gropar
+- **Slitage:** blanknötta kanter och smuts i vrån strax innanför
+- **Skruvar med spår** i hörnen och ingraverade modultitlar
+
+Plåtarna bygger på sju gemensamma brusrutor (512 × 512) som räknas fram en gång och läses med olika förskjutning per plåt. Färdiga plåtar sparas, så det är bara första öppningen som kostar (ungefär en halv sekund med mjukvarurendering); en hel omritning tar sedan ungefär 16 ms. `KrangSnapshot --stilprov-textur fil.png` visar före och efter, och `KrangSnapshot … --tid` mäter rittiden. Mätarpapperet, VFD-glaset och mässingen ritas som förut.
+
+![Stilprovet: dagens texturer överst, de åldrade ytorna underst](docs/stilprov_texturer.png)
 
 ## Bygga lokalt
 
@@ -421,6 +429,67 @@ Kaosmotorn sitter direkt efter kammaren och gör maskinen opålitlig. Varje takt
 
 ![Krang-panelen med Kaosmotorn och Kaosskopet](docs/krangpanelen_kaosmotorn.png)
 
+## Stegverket för melodier
+
+I alla kammare utom Hammarverket (som har sitt trummönster i kammarmodulen) visar knappen **STEGVERKET** i keyboardraden Tonstegverket: en melodisekvenser med upp till 64 steg. Den delar SPELA, tempo, gung och steglängd med Hammarverkets Stegverket, och följer DAW:ens transport på samma sätt.
+
+| Del | Vad den gör |
+| --- | --- |
+| Pianorullen | Två oktaver kring grundtonen. Klicka för att sätta en ton, klicka på en tänd ton för att släcka den, dra för att rita, mushjulet flyttar tonen en halvton, Shift-klick ger accent. Skalans toner är ljusare. |
+| Längd | Hur länge tonen klingar: 1/4, 1/2, 3/4, 1, 1½, 2, 3 eller 4 steg. Klick ökar, Shift-klick minskar. |
+| Glid | Tonen hålls kvar tills nästa ton har börjat. Kammare med legato glider dit (Basmålen, kulning i Kören, sågen i Vattenpumpen); i de andra blir det bundna toner. Glid in i samma ton binder ihop dem utan nytt anslag. |
+| Accent | Starkare anslag. |
+| Takt | 1/8, 1/16, 1/16 triol eller 1/32 per steg. |
+| Grundton | Tonen som slingan utgår från (C1–C5). |
+| Tangenter | *Transponera*: en tangent flyttar hela slingan (grundtonen = ingen flytt), som på en gammal sekvenser; tangenten hörs inte själv. *Spela med*: tangenterna spelar ovanpå slingan. |
+| Skala och SLUMPA | SLUMPA låter Doktor Krang komponera en ny slinga i vald skala (moll, dur, dorisk, frygisk, pentaton, hijaz eller kromatisk). |
+
+Alla fyra sidorna går att öppna och redigera i båda Stegverken. Sidor bortom **STEG** spelas inte och visas matta, så att man kan förbereda en längre slinga innan man ökar STEG.
+
+Melodin sparas med ljudet, i egna presets och i DAW-projektet. I en DAW kan noter på spåret flytta slingan i en ackordföljd (läget Transponera); se `05-tonverket-i-natten.RPP`. Om DAW:en loopar eller hoppar släpps alla toner, så inget hänger kvar.
+
+![Stegverket för melodier](docs/krangpanelen_tonsteg.png)
+
+## Modulationsraden
+
+Knappen **MODULATION** i keyboardraden byter kammarmodulen mot Modulationsraden (och **KAMMARE** byter tillbaka). Siffran på knappen visar hur många kopplingar som är i gång.
+
+| Del | Inställningar |
+| --- | --- |
+| LFO 1 och LFO 2 | Form (Sinus, Triangel, Fyrkant, Sågtand, Slump, Glid), Hastighet 0,02–30 Hz, Takt (Fri, 4 takter … 1/16, 1/4 triol), Omstart (Fri eller Vid ton) |
+| Envelope 1 och 2 | A, D, S, R. Startar om på varje ny ton och släpper när sista tonen släpps |
+| Matrisen | Sex kopplingar: källa → mål, med mängd −100 … +100 % |
+
+**Källor:** LFO 1, LFO 2, Env 1, Env 2, Modhjul (CC 1), Aftertouch (kanal- och nottryck) och Anslag (hur hårt senaste tonen slogs an).
+
+**Mål:** *Klang* (det som gör kammaren ljusare eller skarpare: filtret i Basmålen, rost och stämning i Hammarverket, klangfärgen i Bordunorgeln, FM-djupet i Spolslingan, hammarhårdheten i Stålpianot och Klockgjuteriet, vokalen i Kören, bandbredden i Radiomasten, andningen i Lurblåsaren, ljusheten i Lutverket och stråktrycket i Vattenpumpen), Krangdrive, Filterfrekvens, Filtervokal, Volym, Eko, Katedral, Kaos, Bandwow och Krangspaken.
+
+En synkad LFO följer DAW:ens takt när uppspelningen går, även om man startar mitt i en låt, och annars tempot i Stegverket. Slump väljer ett nytt värde varje varv; Glid gör samma sak men glider mellan värdena. Lampan bredvid varje LFO och envelope lyser med källan, och den gröna visaren i matrisen visar hur mycket varje koppling påverkar sitt mål just nu.
+
+Modulationen räknas om var 64:e sample (0,7 ms vid 96 kHz) och läggs på inställningarna innan de når kammaren, före Krangspaken. Slagverk och stråkar som bestämmer klangen i anslaget (Hammarverket, Stålpianot, Klockgjuteriet) får anslaget och modhjulet redan i slaget. Volymen glider på 20 ms så att en fyrkants-LFO inte knastrar. Med alla kopplingar på noll är Modulationsraden helt avstängd och kostar ingenting.
+
+![Modulationsraden](docs/krangpanelen_modulation.png)
+
+## Testkompositioner i Reaper
+
+I `Reaper/tester/` finns fem Reaper-projekt med KrangBox förinställt på varje spår (VST3), att öppna direkt i Reaper:
+
+| Projekt | Vad det testar |
+| --- | --- |
+| `01-kammartest.RPP` | Alla elva kammare i tur och ordning, fyra takter var, med sitt grundpreset (100 BPM). Lyssningstestet för grind 3. |
+| `02-ruinens-psalm.RPP` | Kör, bordun, kyrkklockor, näverlur i naturtoner och en avlägsen radiostation (72 BPM, D-dorisk). |
+| `03-maskinhallen.RPP` | Stegverket synkat till Reapers transport, acidbas, Slingans arpeggio i tempot, skruvat piano och åskplåt (118 BPM). |
+| `04-folkdans-i-ruinerna.RPP` | Hammarverket via MIDI, kantele, skalmeja, bas och munharpa (104 BPM). |
+| `05-tonverket-i-natten.RPP` | Allt spelas av Stegverket i Reapers takt: trummor, acidslinga, speldosa och kulning; noterna på spåren transponerar slingorna i en ackordföljd (110 BPM). |
+
+Bredvid varje projekt ligger en `.mp3` renderad offline av KrangRender, att jämföra med Reapers egen rendering, och en `.json` med samma komposition. Projekten byggs om med:
+
+```bash
+python3 tools/reaper/make_reaper_projects.py build/KrangRender_artefacts/Release/KrangRender Reaper/tester --render
+```
+
+Skriptet hämtar pluginets tillstånd med `KrangRender --state "<preset>" <fil.xml> [param=värde]` och renderar med `KrangRender --project <komposition.json> <mix.wav>`. Lägg till egna kompositioner i `COMPOSITIONS` i skriptet.
+
 ## Presets
 
 Uppe till höger på frontpanelen: `<` och `>` bläddrar, listan visar alla presets i kategorier och **SPARA** sparar nuvarande ljud som eget preset. Ett eget preset innehåller alla inställningar och Stegverkets mönster. DAW:ens programlista visar fabrikspresets.
@@ -437,6 +506,8 @@ Uppe till höger på frontpanelen: `<` och `>` bläddrar, listan visar alla pres
 | Blås | Init Lurblåsaren, Vallåten, Bockhornet, Skalmejan i gränden, Ångvisslan i hamnen, Rostiga luren |
 | Strängar | Init Lutverket, Kantelen vid elden, Lutan i tornet, Cittrans regn, Rostharpan, Plockslinga i ruinen |
 | Stråkad metall | Init Vattenpumpen, Vattenfonen i tunneln, Sjungande sågen, Plåtåskan, Cymbalens skrik, Pumpstationen |
+| Slingor (med melodi) | Acidslinga i pannrummet, Speldosan i ruinen, Kantelevisan, Kulningsslingan, Sågen i schaktet, Psalmodikon |
+| Modulation | Andande bas, Pumpande bordun, Kören som andas, Stormen i modhjulet, Hårda slag, mjuka slag, Vokalslingan |
 | Trummor (med mönster) | Init Hammarverket, Smedjegång, Rostig fabrik, Folkdans i ruinerna, Ångslagets puls, Bitkrossad marsch, Katedralens slagverk, Träskedsbrygga, Ventilsystemet, Ekande smedja, Trasig trummaskin |
 
 Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar bara det som skiljer sig från standardvärdena. Egna presets sparas som `.krang`-filer (XML) i `~/Library/Application Support/KrangBox/Presets/` och kan delas mellan datorer. Ett eget preset kan inte få samma namn som ett fabrikspreset; det får då tillägget "(eget)".
@@ -466,11 +537,15 @@ Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar ba
 | `Source/dsp/Angledningen.h` | Ångfilter och Katedralreverb (mono in, stereo ut) | Justine |
 | `Source/dsp/Kaosmotorn.h` | Kaosmotorn: hack, baklänges, söndring och slumpdrift | Sara |
 | `Source/dsp/Bandmaskin.h` | Bandmaskinen (wow, flutter, ålder, avbrott) och Ekokammaren (synkat bandeko) | Justine |
+| `Source/dsp/TonStegverket.h` | Stegverket för melodier: ton, längd, glid och accent per steg, transponering, DAW-synk | Sara |
+| `Source/dsp/Modulation.h` | Modulationsraden: två LFO:er, två envelopes, modhjul, aftertouch och matrisen | Sara |
 | `Source/dsp/KrangEngine.h` | Kopplar ihop kammare, effekter, DC-spärr och limiter | Justine |
 | `Source/Parameters.h` | Parameterträdet – ID:n får aldrig döpas om | Justine |
 | `Source/ui/KrangStyle.h` | Krang-stil: LookAndFeel, ratt, fader, modulram, kopparrör, VFD-display, VU-mätare, frontpanel | Philip |
 | `Source/ui/Textures.h` | Genererade texturer och bakgrundscache | Philip |
 | `Source/ui/Panels.h` | Modulerna: Basmålen, Hammarverket (röster + Stegverket), Ångledningen | Philip |
+| `Source/ui/TonStegverketPanel.h` | Tonstegverkets pianorulle och inställningar | Philip |
+| `Source/ui/ModulationPanel.h` | Modulationsraden: LFO-lampor, envelopefaders och matrisen med levande visare | Philip |
 | `Source/ui/StegverketPanel.h` | Stegverkets lamprutnät och transport | Philip |
 | `Source/presets/` | Fabrikspresets och PresetManager (spara, ladda, DAW-program) | Doktor Krang |
 | `Source/PluginEditor.*` | Krang-panelen: skalning, koppling av alla parametrar, presets, keyboard | Philip |

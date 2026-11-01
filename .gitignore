@@ -1,5 +1,6 @@
 build/
 local.sh
+real.sh
 renders/
 .DS_Store
 *.xcodeproj

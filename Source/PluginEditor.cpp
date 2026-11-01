@@ -11,6 +11,7 @@ namespace
 KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     : AudioProcessorEditor (p), processor (p),
       hammarverket (p.pattern, p.stegverket.currentStep),
+      tonsteg (p.melody, p.tonverk.currentStep, p.tonverk.shownTranspose),
       keyboard (p.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     using namespace krang::ui;
@@ -18,7 +19,8 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
 
     addAndMakeVisible (content);
     for (auto* c : std::initializer_list<juce::Component*> { &top, &basmalen, &angledningen, &kaos, &keyboard,
-                                                             &octaveDown, &octaveUp, &keyboardHint })
+                                                             &octaveDown, &octaveUp, &keyboardHint,
+                                                             &showChamber, &showSteg, &showModulation })
         content.addAndMakeVisible (c);
     content.addChildComponent (hammarverket);
     content.addChildComponent (bordunorgeln);
@@ -30,6 +32,20 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     content.addChildComponent (lur);
     content.addChildComponent (lut);
     content.addChildComponent (pump);
+    content.addChildComponent (modulation);
+    content.addChildComponent (tonsteg);
+
+    for (auto* b : { &showChamber, &showSteg, &showModulation })
+    {
+        b->setClickingTogglesState (true);
+        b->setRadioGroupId (4711);
+    }
+    showChamber.setToggleState (true, juce::dontSendNotification);
+    showChamber.onClick = [this] { if (showChamber.getToggleState()) { view = View::Kammare; updateCentreView(); } };
+    showSteg.onClick = [this] { if (showSteg.getToggleState()) { view = View::Steg; updateCentreView(); } };
+    showModulation.onClick = [this] { if (showModulation.getToggleState()) { view = View::Modulation; updateCentreView(); } };
+    showSteg.setTooltip (juce::String::fromUTF8 ("Stegverket för melodier i den valda kammaren (Hammarverket har sitt trummönster i kammarmodulen)."));
+    showModulation.setTooltip (juce::String::fromUTF8 ("Modulationsraden: LFO:er, envelopes och matrisen. Siffran visar hur många kopplingar som är i gång."));
 
     bindAll();
 
@@ -95,7 +111,7 @@ void KrangBoxEditor::bindAll()
     bindSlider (top.master.slider, id::master);
     bindSlider (top.lever.slider, id::krang);
 
-    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), stalpiano.bindings(), klockor.bindings(), koren.bindings(), radio.bindings(), lur.bindings(), lut.bindings(), pump.bindings(), angledningen.bindings(), kaos.bindings() })
+    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), stalpiano.bindings(), klockor.bindings(), koren.bindings(), radio.bindings(), lur.bindings(), lut.bindings(), pump.bindings(), angledningen.bindings(), kaos.bindings(), modulation.bindings() })
     {
         for (auto& [slider, paramId] : bindings.sliders) bindSlider (*slider, paramId);
         for (auto& [combo, paramId] : bindings.combos)   bindCombo (*combo, paramId);
@@ -107,6 +123,16 @@ void KrangBoxEditor::bindAll()
     bindSlider (steg.tempo, id::seqTempo);
     bindSlider (steg.swing, id::seqSwing);
     seqRunAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.state, id::seqRun, steg.play);
+
+    // Tonstegverket delar spela, tempo, gung och längd med Stegverket.
+    bindCombo (tonsteg.length, id::seqLength);
+    bindSlider (tonsteg.tempo, id::seqTempo);
+    bindSlider (tonsteg.swing, id::seqSwing);
+    bindSlider (tonsteg.root, id::tsRoot);
+    bindCombo (tonsteg.rate, id::tsRate);
+    bindCombo (tonsteg.keys, id::tsKeys);
+    bindCombo (tonsteg.scale, id::tsScale);
+    tonRunAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.state, id::seqRun, tonsteg.play);
 }
 
 void KrangBoxEditor::bindSlider (juce::Slider& slider, const juce::String& paramId)
@@ -168,6 +194,8 @@ void KrangBoxEditor::layoutContent()
     lur.setBounds (chamberArea);
     lut.setBounds (chamberArea);
     pump.setBounds (chamberArea);
+    modulation.setBounds (chamberArea);
+    tonsteg.setBounds (chamberArea);
     angledningen.setBounds (r.removeFromTop (angledningHeight));
     kaos.setBounds (r.removeFromTop (kaosHeight));
 
@@ -177,6 +205,12 @@ void KrangBoxEditor::layoutContent()
     bar.removeFromLeft (6);
     octaveUp.setBounds (bar.removeFromLeft (64));
     bar.removeFromLeft (12);
+    showModulation.setBounds (bar.removeFromRight (130));
+    bar.removeFromRight (6);
+    showSteg.setBounds (bar.removeFromRight (110));
+    bar.removeFromRight (6);
+    showChamber.setBounds (bar.removeFromRight (100));
+    bar.removeFromRight (12);
     keyboardHint.setBounds (bar);
     kb.removeFromTop (4);
     keyboard.setBounds (kb);
@@ -196,9 +230,34 @@ void KrangBoxEditor::shiftOctave (int delta)
     keyOctave = juce::jlimit (1, 7, keyOctave + delta);
     keyboard.setKeyPressBaseOctave (keyOctave);
     const auto lowest = juce::MidiMessage::getMidiNoteName (keyOctave * 12, true, true, 4);
-    keyboardHint.setText (juce::String::fromUTF8 ("Spela med musen, eller klicka på keyboardet och använd datorns tangenter "
-                                                  "A W S E D F T G Y H U J K (från ") + lowest + ").",
+    keyboardHint.setText (juce::String::fromUTF8 ("Mus, eller klicka och spela på datorns tangenter A W S E D F T G Y H U J K (från ") + lowest + ").",
                           juce::dontSendNotification);
+}
+
+void KrangBoxEditor::updateCentreView()
+{
+    // Hammarverket har sitt trummönster i kammarmodulen; där finns inget Tonstegverk att visa.
+    const bool drums = shownChamber == 1;
+    showSteg.setEnabled (! drums);
+    if (drums && view == View::Steg)
+    {
+        view = View::Kammare;
+        showChamber.setToggleState (true, juce::dontSendNotification);
+    }
+    const int chamber = view == View::Kammare ? shownChamber : -1;
+    basmalen.setVisible (chamber == 0);
+    hammarverket.setVisible (chamber == 1);
+    bordunorgeln.setVisible (chamber == 2);
+    spolslingan.setVisible (chamber == 3);
+    stalpiano.setVisible (chamber == 4);
+    klockor.setVisible (chamber == 5);
+    koren.setVisible (chamber == 6);
+    radio.setVisible (chamber == 7);
+    lur.setVisible (chamber == 8);
+    lut.setVisible (chamber == 9);
+    pump.setVisible (chamber == 10);
+    modulation.setVisible (view == View::Modulation);
+    tonsteg.setVisible (view == View::Steg);
 }
 
 void KrangBoxEditor::showParameter (const juce::String& paramId)
@@ -285,17 +344,22 @@ void KrangBoxEditor::timerCallback()
     if (chamber != shownChamber)
     {
         shownChamber = chamber;
-        basmalen.setVisible (chamber == 0);
-        hammarverket.setVisible (chamber == 1);
-        bordunorgeln.setVisible (chamber == 2);
-        spolslingan.setVisible (chamber == 3);
-        stalpiano.setVisible (chamber == 4);
-        klockor.setVisible (chamber == 5);
-        koren.setVisible (chamber == 6);
-        radio.setVisible (chamber == 7);
-        lur.setVisible (chamber == 8);
-        lut.setVisible (chamber == 9);
-        pump.setVisible (chamber == 10);
+        updateCentreView();
+    }
+
+    // Modulationsraden: lamporna och visarna, och antalet kopplingar på knappen.
+    {
+        std::array<float, 7> values {};
+        for (size_t i = 0; i < values.size(); ++i)
+            values[i] = processor.modSources[i].load (std::memory_order_relaxed);
+        if (view == View::Modulation)
+            modulation.setSourceValues (values);
+        const int count = modulation.activeCount();
+        if (count != shownModCount)
+        {
+            shownModCount = count;
+            showModulation.setButtonText (count > 0 ? "MODULATION (" + juce::String (count) + ")" : "MODULATION");
+        }
     }
 
     // Presetbyte från DAW:en (programlistan) eller nästa/föregående: följ med i listan.

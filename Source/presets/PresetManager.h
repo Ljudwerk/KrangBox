@@ -8,6 +8,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "FactoryPresets.h"
 #include "../dsp/Stegverket.h"
+#include "../dsp/TonStegverket.h"
 
 namespace krang
 {
@@ -25,7 +26,31 @@ public:
 
     static inline const juce::String fileExtension { ".krang" };
 
-    PresetManager (juce::AudioProcessorValueTreeState& s, StepPattern& p) : state (s), pattern (p) { refresh(); }
+    PresetManager (juce::AudioProcessorValueTreeState& s, StepPattern& p, TonPattern* t = nullptr) : state (s), pattern (p), ton (t) { refresh(); }
+
+    // Mönstren sparas som ett barn "Stegverket" i läget: trummönstret och melodin.
+    static void writePatterns (juce::ValueTree& tree, const StepPattern& drums, const TonPattern* melody)
+    {
+        tree.removeChild (tree.getChildWithName ("Stegverket"), nullptr);
+        juce::ValueTree steg ("Stegverket");
+        steg.setProperty ("pattern", drums.toString(), nullptr);
+        if (melody != nullptr) steg.setProperty ("melody", melody->toString(), nullptr);
+        tree.appendChild (steg, nullptr);
+    }
+
+    // Läser och tar bort barnet. Äldre lägen utan melodi får startmelodin.
+    static void readPatterns (juce::ValueTree& tree, StepPattern& drums, TonPattern* melody)
+    {
+        const auto steg = tree.getChildWithName ("Stegverket");
+        if (! steg.isValid()) return;
+        drums.fromString (steg["pattern"].toString());
+        if (melody != nullptr)
+        {
+            if (steg.hasProperty ("melody")) melody->fromString (steg["melody"].toString());
+            else melody->loadDefault();
+        }
+        tree.removeChild (steg, nullptr);
+    }
 
     static juce::File userFolder()
     {
@@ -83,7 +108,7 @@ public:
         load (((juce::jmax (0, getCurrentIndex()) + delta) % n + n) % n);
     }
 
-    // Sparar nuvarande ljud (alla parametrar + Stegverkets mönster) som eget preset.
+    // Sparar nuvarande ljud (alla parametrar, Stegverkets mönster och melodin) som eget preset.
     bool saveUser (const juce::String& rawName)
     {
         auto name = juce::File::createLegalFileName (rawName.trim());
@@ -95,8 +120,7 @@ public:
         userFolder().createDirectory();
         auto copy = state.copyState();
         copy.setProperty ("presetName", name, nullptr);
-        copy.removeChild (copy.getChildWithName ("Stegverket"), nullptr);
-        copy.appendChild (juce::ValueTree ("Stegverket").setProperty ("pattern", pattern.toString(), nullptr), nullptr);
+        writePatterns (copy, pattern, ton);
         auto xml = copy.createXml();
         if (xml == nullptr || ! xml->writeTo (userFolder().getChildFile (name + fileExtension)))
             return false;
@@ -136,6 +160,8 @@ private:
                     pattern.set (lane, step, row[step % juce::jmax (1, row.length())] - '0');
             }
         }
+        if (preset.melody != nullptr && ton != nullptr)
+            ton->fromString (juce::String::fromUTF8 (preset.melody));
     }
 
     bool loadFile (const juce::File& f)
@@ -144,18 +170,14 @@ private:
         if (xml == nullptr || ! xml->hasTagName (state.state.getType()))
             return false;
         auto tree = juce::ValueTree::fromXml (*xml);
-        const auto steg = tree.getChildWithName ("Stegverket");
-        if (steg.isValid())
-        {
-            pattern.fromString (steg["pattern"].toString());
-            tree.removeChild (steg, nullptr);
-        }
+        readPatterns (tree, pattern, ton);
         state.replaceState (tree);
         return true;
     }
 
     juce::AudioProcessorValueTreeState& state;
     StepPattern& pattern;
+    TonPattern* ton = nullptr;
     std::vector<Entry> entries;
 };
 

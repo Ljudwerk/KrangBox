@@ -21,6 +21,7 @@ struct FactoryPreset
     const char* category;  // UTF-8
     std::vector<std::pair<const char*, float>> values;
     std::vector<const char*> pattern; // tomt = mönstret lämnas orört; annars 8 rader à 16 tecken
+    const char* melody = nullptr;     // Tonstegverkets melodi (se TonPattern::fromString); nullptr = orörd
 };
 
 // Index för valparametrar, så att listan nedan går att läsa.
@@ -407,6 +408,79 @@ inline const std::vector<FactoryPreset>& factoryPresets()
           { { "chamber", vattenpumpen }, { "vpType", vattenfon }, { "vpWater", 1.0f }, { "vpRust", 0.5f }, { "vpPressure", 0.6f },
             { "distMode", fuzz }, { "distDrive", 10.0f }, { "distMix", 0.25f }, { "kaAmount", 0.15f }, { "kaStutter", 0.3f },
             { "kaReverse", 0.7f }, { "kaCrush", 0.0f }, { "tpWow", 0.4f }, { "rvbMode", hall }, { "rvbMix", 0.4f } }, {} },
+
+        // ------------------------------------------------------------------ Modulation
+        // Ljud som bygger på Modulationsraden. LFO-form: 0 sinus, 1 triangel, 2 fyrkant, 3 sågtand, 4 slump, 5 glid.
+        // Takt: 0 fri, 3 en takt, 4 1/2, 5 1/4, 6 1/8, 7 1/16. Källa: 1 LFO 1, 2 LFO 2, 3 env 1, 4 env 2, 5 modhjul,
+        // 6 aftertouch, 7 anslag. Mål: 1 Klang, 2 Krangdrive, 3 filterfrekvens, 4 filtervokal, 5 volym, 6 eko,
+        // 7 katedral, 8 kaos, 9 bandwow, 10 Krangspaken.
+        { "Andande bas", "Modulation",
+          { { "chamber", basmalen }, { "lfo1Shape", 0 }, { "lfo1Sync", 4 },
+            { "mod1Src", 1 }, { "mod1Dst", 1 }, { "mod1Amt", 0.35f },
+            { "mod2Src", 7 }, { "mod2Dst", 2 }, { "mod2Amt", 0.3f } }, {} },
+
+        { "Pumpande bordun", "Modulation",
+          { { "chamber", bordunorgeln }, { "master", 2.0f }, { "lfo1Shape", 3 }, { "lfo1Sync", 5 },
+            { "mod1Src", 1 }, { "mod1Dst", 5 }, { "mod1Amt", -0.3f },
+            { "lfo2Shape", 0 }, { "lfo2Rate", 0.08f }, { "mod2Src", 2 }, { "mod2Dst", 1 }, { "mod2Amt", 0.5f },
+            { "rvbMix", 0.3f } }, {} },
+
+        { "Kören som andas", "Modulation",
+          { { "chamber", koren }, { "lfo1Shape", 5 }, { "lfo1Rate", 0.15f },
+            { "mod1Src", 1 }, { "mod1Dst", 1 }, { "mod1Amt", 0.7f },
+            { "lfo2Shape", 0 }, { "lfo2Rate", 0.05f }, { "mod2Src", 2 }, { "mod2Dst", 7 }, { "mod2Amt", 0.25f },
+            { "rvbMode", hall }, { "rvbMix", 0.35f }, { "rvbSize", 0.85f } }, {} },
+
+        { "Stormen i modhjulet", "Modulation",
+          { { "chamber", radiomasten },
+            { "mod1Src", 5 }, { "mod1Dst", 10 }, { "mod1Amt", 0.9f },
+            { "mod2Src", 6 }, { "mod2Dst", 2 }, { "mod2Amt", 0.6f },
+            { "lfo1Shape", 4 }, { "lfo1Sync", 7 }, { "mod3Src", 1 }, { "mod3Dst", 9 }, { "mod3Amt", 0.25f } }, {} },
+
+        { "Hårda slag, mjuka slag", "Modulation",
+          { { "chamber", stalpiano }, { "master", 1.0f },
+            { "mod1Src", 7 }, { "mod1Dst", 1 }, { "mod1Amt", 0.7f },
+            { "env1A", 0.001f }, { "env1D", 1.5f }, { "env1S", 0.0f }, { "env1R", 1.0f },
+            { "mod2Src", 3 }, { "mod2Dst", 6 }, { "mod2Amt", -0.3f }, { "ecSync", eko16 }, { "ecMix", 0.35f },
+            { "rvbMix", 0.25f } }, {} },
+
+        { "Vokalslingan", "Modulation",
+          { { "chamber", spolslingan }, { "fxMode", formant }, { "fxVowel", 0.4f },
+            { "lfo1Shape", 1 }, { "lfo1Sync", 3 }, { "mod1Src", 1 }, { "mod1Dst", 1 }, { "mod1Amt", 0.4f },
+            { "lfo2Shape", 4 }, { "lfo2Sync", 7 }, { "mod2Src", 2 }, { "mod2Dst", 4 }, { "mod2Amt", 0.35f } }, {} },
+
+        // ------------------------------------------------------------------ Slingor (med melodi)
+        // Melodier för Tonstegverket: tryck SPELA under STEGVERKET (eller starta DAW:en). Tangenterna transponerar.
+        { "Acidslinga i pannrummet", "Slingor (med melodi)",
+          { { "chamber", basmalen }, { "seqTempo", 124.0f }, { "glide", 70.0f }, { "cutoff", 380.0f }, { "resonance", 0.8f },
+            { "envAmount", 0.7f }, { "fltD", 0.18f }, { "ampS", 0.8f }, { "distMode", ror }, { "distDrive", 20.0f }, { "distMix", 0.7f },
+            { "ecSync", eko8p }, { "ecFeedback", 0.35f }, { "ecMix", 0.18f } },
+          {}, "0a 0~ 12 0 . 0 10~ 12 0a . 3 0 7~ 5 3a 0" },
+
+        { "Speldosan i ruinen", "Slingor (med melodi)",
+          { { "chamber", klockgjuteriet }, { "klType", skalklocka }, { "klDecay", 3.0f }, { "tsRoot", 60.0f }, { "tsScale", 4.0f },
+            { "seqTempo", 92.0f }, { "tpWow", 0.35f }, { "tpAge", 0.4f }, { "rvbMode", hall }, { "rvbMix", 0.35f } },
+          {}, "0 7 12 . 4 . 9 7 . 12 . 4 2 . 0 ." },
+
+        { "Kantelevisan", "Slingor (med melodi)",
+          { { "chamber", lutverket }, { "master", 2.0f }, { "ltType", kantele }, { "ltDecay", 6.0f }, { "tsRoot", 50.0f }, { "tsScale", 2.0f },
+            { "seqTempo", 84.0f }, { "tsRate", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.3f } },
+          {}, "0 . 3 5 7a . 5 3 2 . 0 . -2 . 0/5 ." },
+
+        { "Kulningsslingan", "Slingor (med melodi)",
+          { { "chamber", koren }, { "koVoices", kulning }, { "tsRoot", 62.0f }, { "tsScale", 2.0f }, { "seqTempo", 70.0f },
+            { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbSize", 0.9f } },
+          {}, "0~/7 . . . 7~/7 . . . 5~/5 . . 3~/3 . 0/7 . ." },
+
+        { "Sågen i schaktet", "Slingor (med melodi)",
+          { { "chamber", vattenpumpen }, { "vpType", sag }, { "vpGlide", 0.25f }, { "vpVibrato", 0.4f }, { "tsRoot", 52.0f },
+            { "seqTempo", 76.0f }, { "tsRate", 0.0f }, { "distMix", 0.0f }, { "rvbMode", platta }, { "rvbMix", 0.35f } },
+          {}, "0~/5 . 7~/5 . 5~/3 3~ 2/5 . 0~/5 . -2~/5 . 0/7 . . ." },
+
+        { "Psalmodikon", "Slingor (med melodi)",
+          { { "chamber", bordunorgeln }, { "tsRoot", 50.0f }, { "tsRate", 0.0f }, { "seqTempo", 66.0f }, { "tsScale", 2.0f },
+            { "rvbMode", hall }, { "rvbMix", 0.4f } },
+          {}, "0/7 . . . 2/5 . 3/5 . 2/7 . . . 0~/7 . . ." },
 
         // ------------------------------------------------------------------ Trummor
         { "Init Hammarverket", "Trummor", { { "chamber", hammarverket } },

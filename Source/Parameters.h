@@ -141,6 +141,11 @@ namespace id
     inline constexpr auto vpAttack    = "vpAttack";
     inline constexpr auto vpRelease   = "vpRelease";
 
+    // Modulationsraden: lfo<n><Shape|Rate|Sync|Retrig>, env<n><A|D|S|R>, mod<n><Src|Dst|Amt>.
+    inline juce::String lfo (int n, const char* what) { return "lfo" + juce::String (n) + what; }
+    inline juce::String menv (int n, const char* what) { return "env" + juce::String (n) + what; }
+    inline juce::String slot (int n, const char* what) { return "mod" + juce::String (n) + what; }
+
     inline constexpr auto kaAmount    = "kaAmount";
     inline constexpr auto kaSync      = "kaSync";
     inline constexpr auto kaRate      = "kaRate";
@@ -169,6 +174,11 @@ namespace id
     inline constexpr auto seqTempo    = "seqTempo";
     inline constexpr auto seqSwing    = "seqSwing";
     inline constexpr auto seqLength   = "seqLength";
+    // Tonstegverket (Stegverket för melodier i alla kammare utom Hammarverket)
+    inline constexpr auto tsRoot      = "tsRoot";
+    inline constexpr auto tsKeys      = "tsKeys";
+    inline constexpr auto tsRate      = "tsRate";
+    inline constexpr auto tsScale     = "tsScale";
 
     // Hammarverket: hv<röst><Tune|Decay|Level>, t.ex. "hv0Tune". Röstnummer enligt krang::Drum.
     inline juce::String drum (int index, const char* what) { return "hv" + juce::String (index) + what; }
@@ -390,6 +400,46 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     add (id::vpAttack,   "Stråkens insats",  time (4.0f), 0.3f, "s");
     add (id::vpRelease,  "Stråkens avklang", time (6.0f), 1.0f, "s");
 
+    // Modulationsraden
+    for (int n = 1; n <= 2; ++n)
+    {
+        const String num (n);
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::lfo (n, "Shape"), 1 }, "LFO " + num + " form",
+                                                             StringArray { "Sinus", "Triangel", "Fyrkant", String::fromUTF8 ("Sågtand"), "Slump", "Glid" }, 0));
+        NormalisableRange<float> r (0.02f, 30.0f); r.setSkewForCentre (2.0f);
+        p.push_back (std::make_unique<P> (ParameterID { id::lfo (n, "Rate"), 1 }, "LFO " + num + " hastighet", r, n == 1 ? 2.0f : 0.3f,
+                                          AudioParameterFloatAttributes().withLabel ("Hz")
+                                              .withStringFromValueFunction ([] (float v, int) { return String (v, v < 1.0f ? 2 : 1); })));
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::lfo (n, "Sync"), 1 }, "LFO " + num + " takt",
+                                                             StringArray { "Fri", "4 takter", "2 takter", "1 takt", "1/2", "1/4", "1/8", "1/16", "1/4 triol" }, 0));
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::lfo (n, "Retrig"), 1 }, "LFO " + num + " omstart",
+                                                             StringArray { "Fri", "Vid ton" }, 0));
+    }
+    for (int n = 1; n <= 2; ++n)
+    {
+        const String num (n);
+        p.push_back (std::make_unique<P> (ParameterID { id::menv (n, "A"), 1 }, "Mod-env " + num + " attack", time (4.0f), 0.01f,
+                                          AudioParameterFloatAttributes().withLabel ("s").withStringFromValueFunction ([] (float v, int) { return String (v, 3); })));
+        p.push_back (std::make_unique<P> (ParameterID { id::menv (n, "D"), 1 }, "Mod-env " + num + " decay", time (8.0f), 0.4f,
+                                          AudioParameterFloatAttributes().withLabel ("s").withStringFromValueFunction ([] (float v, int) { return String (v, 3); })));
+        p.push_back (std::make_unique<P> (ParameterID { id::menv (n, "S"), 1 }, "Mod-env " + num + " sustain", NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+                                          AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (v, 2); })));
+        p.push_back (std::make_unique<P> (ParameterID { id::menv (n, "R"), 1 }, "Mod-env " + num + " release", time (8.0f), 0.4f,
+                                          AudioParameterFloatAttributes().withLabel ("s").withStringFromValueFunction ([] (float v, int) { return String (v, 3); })));
+    }
+    for (int n = 1; n <= 6; ++n)
+    {
+        const String num (n);
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::slot (n, "Src"), 1 }, "Koppling " + num + " k" + String::fromUTF8 ("ä") + "lla",
+                                                             StringArray { String::fromUTF8 ("—"), "LFO 1", "LFO 2", "Env 1", "Env 2", "Modhjul", "Aftertouch", "Anslag" }, 0));
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::slot (n, "Dst"), 1 }, "Koppling " + num + " m" + String::fromUTF8 ("å") + "l",
+                                                             StringArray { String::fromUTF8 ("—"), "Klang", "Krangdrive", "Filterfrekvens", "Filtervokal", "Volym",
+                                                                           "Eko", "Katedral", "Kaos", "Bandwow", "Krangspaken" }, 0));
+        p.push_back (std::make_unique<P> (ParameterID { id::slot (n, "Amt"), 1 }, "Koppling " + num + " m" + String::fromUTF8 ("ä") + "ngd", NormalisableRange<float> (-1.0f, 1.0f), 0.0f,
+                                          AudioParameterFloatAttributes().withLabel ("%")
+                                              .withStringFromValueFunction ([] (float v, int) { return (v > 0.0f ? "+" : "") + String (roundToInt (v * 100.0f)); })));
+    }
+
     // Kaosmotorn
     p.push_back (std::make_unique<P> (ParameterID { id::kaAmount, 1 }, "Kaos", NormalisableRange<float> (0.0f, 1.0f), 0.0f,
                                       AudioParameterFloatAttributes().withLabel ("%")
@@ -453,6 +503,17 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                           .withValueFromStringFunction ([] (const String& t) { return t.getFloatValue() / 200.0f; })));
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::seqLength, 1 }, String::fromUTF8 ("Steglängd"),
                                                          StringArray { "16", "32", "48", "64" }, 0));
+
+    // Tonstegverket
+    p.push_back (std::make_unique<AudioParameterInt> (ParameterID { id::tsRoot, 1 }, "Tonstegverket grundton", 24, 72, 36,
+                                                      AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int)
+                                                      { return MidiMessage::getMidiNoteName (v, true, true, 4); })));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::tsKeys, 1 }, "Tonstegverket tangenter",
+                                                         StringArray { "Spela med", "Transponera" }, 1));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::tsRate, 1 }, "Tonstegverket takt",
+                                                         StringArray { "1/8", "1/16", "1/16 triol", "1/32" }, 1));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::tsScale, 1 }, "Tonstegverket skala",
+                                                         StringArray { "Moll", "Dur", "Dorisk", "Frygisk", "Pentaton", "Hijaz", "Kromatisk" }, 0));
 
     // Bordunorgeln
     p.push_back (std::make_unique<P> (ParameterID { id::boTimbre, 1 }, String::fromUTF8 ("Klangfärg"), NormalisableRange<float> (0.0f, 1.0f), 0.5f,
@@ -651,6 +712,24 @@ public:
         vp.attackSec  = v (id::vpAttack);
         vp.releaseSec = v (id::vpRelease);
 
+        for (int n = 0; n < 2; ++n)
+        {
+            auto& l = e.mod.lfo[(size_t) n];
+            l.shape     = (LfoShape) (int) v (id::lfo (n + 1, "Shape"));
+            l.rateHz    = v (id::lfo (n + 1, "Rate"));
+            l.sync      = (int) v (id::lfo (n + 1, "Sync"));
+            l.retrigger = v (id::lfo (n + 1, "Retrig")) > 0.5f;
+            auto& en = e.mod.env[(size_t) n];
+            en = { v (id::menv (n + 1, "A")), v (id::menv (n + 1, "D")), v (id::menv (n + 1, "S")), v (id::menv (n + 1, "R")) };
+        }
+        for (int n = 0; n < 6; ++n)
+        {
+            auto& sl = e.mod.slots[(size_t) n];
+            sl.source = (ModSource) (int) v (id::slot (n + 1, "Src"));
+            sl.dest   = (ModDest) (int) v (id::slot (n + 1, "Dst"));
+            sl.amount = v (id::slot (n + 1, "Amt"));
+        }
+
         e.kaos.amount  = v (id::kaAmount);
         e.kaos.sync    = (int) v (id::kaSync);
         e.kaos.rateHz  = v (id::kaRate);
@@ -705,6 +784,10 @@ public:
         e.stegverket.tempo  = v (id::seqTempo);
         e.stegverket.swing  = v (id::seqSwing);
         e.stegverket.length = 16 * (1 + (int) v (id::seqLength));
+        e.ton.root  = (int) v (id::tsRoot);
+        e.ton.keys  = (TonKeyMode) (int) v (id::tsKeys);
+        e.ton.rate  = (int) v (id::tsRate);
+        e.ton.scale = (TonScale) (int) v (id::tsScale);
         e.slingan.tempo = e.stegverket.tempo; // samma tempo som Stegverket när DAW:en inte spelar
         e.bpm = e.stegverket.tempo;           // processorn byter till DAW:ens tempo när den spelar
         e.hammarverket.rost = v (id::hvRost);
@@ -715,7 +798,7 @@ public:
             dp.decay = drumDecay[k]->load();
             dp.level = drumLevel[k]->load();
         }
-        applyKrangspaken (e, krangspaken);
+        e.krangspakenRaw = krangspaken; // motorn lägger på spaken efter modulationen
         return e;
     }
 

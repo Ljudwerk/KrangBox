@@ -16,7 +16,9 @@
 #include "Lurblasaren.h"
 #include "Lutverket.h"
 #include "Vattenpumpen.h"
+#include "Modulation.h"
 #include "Slingan.h"
+#include "TonStegverket.h"
 #include "KrangDistortion.h"
 #include "Stegverket.h"
 #include "Angledningen.h"
@@ -45,6 +47,7 @@ struct EngineParams
     VattenpumpenParams pump;
     SlinganSettings slingan;
     StegverketSettings stegverket;
+    TonSettings ton;
     DistortionParams distortion;
     FxFilterParams filter;
     KaosParams kaos;
@@ -52,8 +55,12 @@ struct EngineParams
     EchoParams echo;
     ReverbParams reverb;
     float masterDb = 0.0f;
+    ModParams mod;
     double bpm = 120.0;        // DAW:ens tempo när den spelar, annars Stegverkets; används av synkat eko
     float krangspaken = 0.0f; // 0..1, redan inräknad i fälten ovan av applyKrangspaken()
+    // Spakens läge som det står på panelen. Sätts av Reader; motorn lägger då på spaken själv, efter
+    // modulationen (så att modulationen kan dra i spaken). −1 = redan inräknad (applyKrangspaken anropad).
+    float krangspakenRaw = -1.0f;
 };
 
 // Krangspaken: en makrospak som drar hela maskinen mot sönderfall på en gång.
@@ -130,6 +137,44 @@ inline void applyKrangspaken (EngineParams& e, float k)
     e.reverb.dark = toward (e.reverb.dark, 0.8f, 0.5f);
 }
 
+// Lägger på modulationsraden: varje mål får summan av sina kopplingar (ungefär −1..1).
+inline void applyModulation (EngineParams& e, const Modulation& m)
+{
+    auto amount = [&m] (ModDest d) { return m.destValue (d); };
+    auto clamp01 = [] (float v) { return juce::jlimit (0.0f, 1.0f, v); };
+
+    if (const float k = amount (ModDest::Klang); k != 0.0f)
+    {
+        // Klang: det som gör just den här kammaren ljusare eller skarpare (i Hammarverket: rost och stämning).
+        switch (e.chamber)
+        {
+            case Chamber::Basmalen:       e.basmalen.cutoffHz = juce::jlimit (20.0f, 18000.0f, e.basmalen.cutoffHz * std::exp2 (k * 4.0f)); break;
+            case Chamber::Hammarverket:   e.hammarverket.rost = clamp01 (e.hammarverket.rost + k);
+                                          for (auto& d : e.hammarverket.drums) d.tune = juce::jlimit (-12.0f, 12.0f, d.tune + k * 7.0f);
+                                          break;
+            case Chamber::Bordunorgeln:   e.bordunorgeln.timbre = clamp01 (e.bordunorgeln.timbre + k * 0.5f); break;
+            case Chamber::Spolslingan:    e.spolslingan.index = juce::jlimit (0.0f, 10.0f, e.spolslingan.index + k * 5.0f); break;
+            case Chamber::Stalpiano:      e.stalpiano.hardness = clamp01 (e.stalpiano.hardness + k * 0.5f); break;
+            case Chamber::Klockgjuteriet: e.klockor.hardness = clamp01 (e.klockor.hardness + k * 0.5f); break;
+            case Chamber::Koren:          e.koren.vowel = clamp01 (e.koren.vowel + k * 0.5f); break;
+            case Chamber::Radiomasten:    e.radio.bandwidth = clamp01 (e.radio.bandwidth + k * 0.5f); break;
+            case Chamber::Lurblasaren:    e.lur.breath = clamp01 (e.lur.breath + k * 0.5f); break;
+            case Chamber::Lutverket:      e.lut.brightness = clamp01 (e.lut.brightness + k * 0.5f); break;
+            case Chamber::Vattenpumpen:   e.pump.pressure = clamp01 (e.pump.pressure + k * 0.5f); break;
+        }
+    }
+    e.distortion.driveDb = juce::jlimit (0.0f, 60.0f, e.distortion.driveDb + amount (ModDest::Krangdrive) * 24.0f);
+    e.filter.cutoffHz = juce::jlimit (20.0f, 18000.0f, e.filter.cutoffHz * std::exp2 (amount (ModDest::Filterfrekvens) * 4.0f));
+    e.filter.vowel = clamp01 (e.filter.vowel + amount (ModDest::Filtervokal));
+    e.masterDb = juce::jlimit (-60.0f, 12.0f, e.masterDb + amount (ModDest::Volym) * 24.0f);
+    e.echo.mix = clamp01 (e.echo.mix + amount (ModDest::Eko));
+    e.reverb.mix = clamp01 (e.reverb.mix + amount (ModDest::Katedral));
+    e.kaos.amount = clamp01 (e.kaos.amount + amount (ModDest::Kaos));
+    e.tape.wow = clamp01 (e.tape.wow + amount (ModDest::Bandwow));
+    if (e.krangspakenRaw >= 0.0f)
+        e.krangspakenRaw = clamp01 (e.krangspakenRaw + amount (ModDest::Krangspaken));
+}
+
 class KrangEngine
 {
 public:
@@ -152,6 +197,8 @@ public:
         tape.prepare (sampleRate, maxBlockSize);
         echo.prepare (sampleRate, maxBlockSize);
         reverb.prepare (sampleRate, maxBlockSize);
+        modulation.prepare (sampleRate);
+        masterGain.reset (sampleRate, 0.02); // volymen glider, så att modulerad volym inte knastrar
         limiter.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
         limiter.setThreshold (-0.5f);
         limiter.setRelease (80.0f);
@@ -179,11 +226,30 @@ public:
         echo.reset();
         reverb.reset();
         limiter.reset();
+        modulation.reset();
         dcX = dcY = 0.0f;
     }
 
+    // Tar emot parametrarna som de står på panelen. Modulationen och Krangspaken läggs på i configure().
     void setParams (const EngineParams& p)
     {
+        base = p;
+        modulation.setParams (p.mod);
+        modActive = p.mod.active();
+        configure();
+    }
+
+    // DAW:ens transport, för LFO:er som är synkade till takten.
+    void setTransport (bool playing, double ppq, double bpm) { modulation.setTransport (playing, ppq, bpm); }
+
+    const Modulation& getModulation() const { return modulation; }
+
+private:
+    void configure()
+    {
+        EngineParams p = base;
+        if (modActive) applyModulation (p, modulation);
+        if (p.krangspakenRaw >= 0.0f) applyKrangspaken (p, p.krangspakenRaw);
         if (p.chamber != chamber)
         {
             // Byte av kammare: tysta den gamla så att inga toner hänger kvar.
@@ -217,11 +283,19 @@ public:
         tape.setParams (p.tape);
         echo.setParams (p.echo, p.bpm);
         reverb.setParams (p.reverb);
-        masterGain = juce::Decibels::decibelsToGain (p.masterDb);
+        masterGain.setTargetValue (juce::Decibels::decibelsToGain (p.masterDb));
     }
 
+public:
     void handleMidi (const juce::MidiMessage& m)
     {
+        modulation.handleMidi (m);
+        if (modActive && (m.isNoteOn() || m.isController() || m.isChannelPressure() || m.isAftertouch()))
+        {
+            // Anslag, modhjul och LFO:er som börjar om ska gälla redan i anslaget – inte först i nästa bit.
+            modulation.advance (0);
+            configure();
+        }
         if (m.isNoteOn())
         {
             switch (chamber)
@@ -280,8 +354,29 @@ public:
         }
     }
 
-    // Renderar stereo: kammaren och distortion/filter i mono i left, reverben sprider till left/right.
+    // Renderar stereo. Med modulation påslagen i bitar om 64 sample, och parametrarna läggs om mellan bitarna.
     void render (float* left, float* right, int numSamples)
+    {
+        if (! modActive)
+        {
+            modulation.advance (numSamples);
+            renderChunk (left, right, numSamples);
+            return;
+        }
+        for (int pos = 0; pos < numSamples; pos += modChunk)
+        {
+            const int n = juce::jmin (modChunk, numSamples - pos);
+            modulation.advance (n);
+            configure();
+            renderChunk (left + pos, right + pos, n);
+        }
+    }
+
+private:
+    static constexpr int modChunk = 64;
+
+    // Kammaren och distortion/filter i mono i left, reverben sprider till left/right.
+    void renderChunk (float* left, float* right, int numSamples)
     {
         switch (chamber)
         {
@@ -308,7 +403,7 @@ public:
             const float x = left[i];
             dcY = x - dcX + dcCoef * dcY;
             dcX = x;
-            left[i] = dcY * masterGain;
+            left[i] = dcY * masterGain.getNextValue();
         }
 
         reverb.process (left, left, right, numSamples);
@@ -323,6 +418,7 @@ public:
         juce::FloatVectorOperations::clip (right, right, -ceiling, ceiling, numSamples);
     }
 
+public:
     juce::uint32 getKaosEventCount() const { return kaos.getEventCount(); }
 
     int getLatencyInSamples() const { return distortion.getLatencyInSamples(); }
@@ -347,7 +443,10 @@ private:
     Ekokammare echo;
     Katedralreverb reverb;
     juce::dsp::Limiter<float> limiter;
-    float masterGain = 1.0f;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> masterGain { 1.0f };
+    Modulation modulation;
+    EngineParams base;
+    bool modActive = false;
     float dcCoef = 0.999f, dcX = 0.0f, dcY = 0.0f;
 };
 

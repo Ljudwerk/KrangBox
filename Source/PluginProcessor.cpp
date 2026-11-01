@@ -7,6 +7,7 @@ KrangBoxProcessor::KrangBoxProcessor()
       state (*this, nullptr, "KrangBox", krang::params::createLayout())
 {
     pattern.loadDefault();
+    melody.loadDefault();
     state.state.setProperty ("presetName", juce::String::fromUTF8 ("Init Basmålen"), nullptr);
 }
 
@@ -15,6 +16,7 @@ void KrangBoxProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     keyboardState.reset();
     stegverket.prepare (sampleRate);
     slingan.prepare (sampleRate);
+    tonverk.prepare (sampleRate);
     engine.prepare (sampleRate, samplesPerBlock);
     scratchRight.setSize (1, juce::jmax (1, samplesPerBlock));
     engine.setParams (reader.read());
@@ -46,6 +48,7 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     if (transport.hostPlaying)
         params.bpm = transport.bpm;
     engine.setParams (params);
+    engine.setTransport (transport.hostPlaying, transport.ppq, params.bpm);
 
     // Lägg till noter från det virtuella keyboardet (och datorns tangentbord).
     keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
@@ -56,6 +59,14 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                             wrapperType == wrapperType_Standalone, buffer.getNumSamples(), midi);
     else
         stegverket.reset();
+
+    // Tonstegverket spelar melodin i alla andra kammare (och släpper sina toner när man byter till Hammarverket).
+    {
+        auto settings = params.stegverket;
+        if (params.chamber == krang::Chamber::Hammarverket) settings.run = false;
+        tonverk.process (midi, melody, settings, params.ton, transport,
+                         wrapperType == wrapperType_Standalone, buffer.getNumSamples());
+    }
 
     // Slingan arpeggierar det som spelas i Spolslingan.
     if (params.chamber == krang::Chamber::Spolslingan)
@@ -94,6 +105,8 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     scope.push (buffer.getReadPointer (0), total);
     kaosEvents.store (engine.getKaosEventCount(), std::memory_order_relaxed);
+    for (int i = 0; i < (int) modSources.size(); ++i)
+        modSources[(size_t) i].store (engine.getModulation().sourceValue ((krang::ModSource) (i + 1)), std::memory_order_relaxed);
 
     const float peak = buffer.getMagnitude (0, total);
     float prev = outputPeak.load();
@@ -108,8 +121,7 @@ juce::AudioProcessorEditor* KrangBoxProcessor::createEditor()
 void KrangBoxProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto copy = state.copyState();
-    copy.removeChild (copy.getChildWithName ("Stegverket"), nullptr);
-    copy.appendChild (juce::ValueTree ("Stegverket").setProperty ("pattern", pattern.toString(), nullptr), nullptr);
+    krang::PresetManager::writePatterns (copy, pattern, &melody);
     if (auto xml = copy.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -120,12 +132,7 @@ void KrangBoxProcessor::setStateInformation (const void* data, int sizeInBytes)
         if (xml->hasTagName (state.state.getType()))
         {
             auto tree = juce::ValueTree::fromXml (*xml);
-            const auto steg = tree.getChildWithName ("Stegverket");
-            if (steg.isValid())
-            {
-                pattern.fromString (steg["pattern"].toString());
-                tree.removeChild (steg, nullptr);
-            }
+            krang::PresetManager::readPatterns (tree, pattern, &melody);
             state.replaceState (tree);
         }
 }

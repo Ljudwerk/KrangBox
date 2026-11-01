@@ -16,6 +16,7 @@ public:
     StepGrid (StepPattern& p, std::atomic<int>& playing) : pattern (p), playingStep (playing) {}
 
     void setPage (int newPage) { page = newPage; repaint(); }
+    void setPlayablePages (int n) { if (n != playablePages) { playablePages = n; repaint(); } }
     int getPage() const { return page; }
 
     void paint (juce::Graphics& g) override
@@ -72,6 +73,18 @@ public:
                 }
             }
         }
+
+        // Sidan ligger utanför slingan: matta lampor och en förklaring.
+        if (page >= playablePages)
+        {
+            auto r = getLocalBounds().toFloat().withTrimmedLeft (labelW);
+            g.setColour (juce::Colours::black.withAlpha (0.5f));
+            g.fillRect (r);
+            g.setColour (colours::engraving.withAlpha (0.85f));
+            g.setFont (panelFont (12.0f));
+            g.drawText (juce::String::fromUTF8 ("SIDAN SPELAS INTE – ÖKA STEG TILL ") + juce::String ((page + 1) * 16) + juce::String::fromUTF8 (" FÖR ATT HÖRA DEN"),
+                        r, juce::Justification::centred);
+        }
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -110,7 +123,7 @@ private:
     static constexpr float labelW = 112.0f;
     StepPattern& pattern;
     std::atomic<int>& playingStep;
-    int page = 0, paintValue = 1;
+    int page = 0, playablePages = 4, paintValue = 1;
     Cell lastCell;
 };
 
@@ -227,23 +240,30 @@ public:
     juce::Rectangle<int> getGridBounds() const { return grid.getBounds(); }
     static constexpr int gridLabelWidth = 112;
 
+    // Öppnar en sida (0–3), som ett klick på sidknappen.
+    void showPage (int i) { updatePages(); pages[(size_t) juce::jlimit (0, 3, i)].setToggleState (true, juce::sendNotificationSync); grid.setPage (juce::jlimit (0, 3, i)); }
+
     juce::TextButton play { "SPELA" };
     juce::Slider tempo, swing;
     juce::ComboBox length;
 
 private:
+    // Alla fyra sidor går att öppna och redigera; sidor bortom STEG spelas inte och visas matta,
+    // så att man kan förbereda en längre slinga innan man ökar STEG.
     void updatePages()
     {
         const int numPages = juce::jmax (1, length.getSelectedItemIndex() + 1);
         if (numPages == shownPages) return;
         shownPages = numPages;
         for (int i = 0; i < 4; ++i)
-            pages[(size_t) i].setEnabled (i < numPages);
-        if (grid.getPage() >= numPages)
         {
-            pages[0].setToggleState (true, juce::dontSendNotification);
-            grid.setPage (0);
+            auto& b = pages[(size_t) i];
+            const bool inLoop = i < numPages;
+            b.setColour (juce::TextButton::textColourOffId, inLoop ? colours::engraving : colours::engraving.withAlpha (0.35f));
+            b.setColour (juce::TextButton::buttonColourId, inLoop ? colours::chassisHigh : colours::bakelite);
+            b.setTooltip (inLoop ? juce::String() : juce::String::fromUTF8 ("Sidan ligger utanför slingan – öka STEG för att höra den"));
         }
+        grid.setPlayablePages (numPages);
     }
 
     void timerCallback() override

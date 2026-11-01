@@ -10,6 +10,8 @@
 #include "presets/PresetManager.h"
 #include "dsp/Slingan.h"
 #include <iostream>
+#include <functional>
+#include <map>
 
 namespace
 {
@@ -190,6 +192,138 @@ int main (int argc, char* argv[])
         return 1;
     }
 
+    // KrangRender --state "<preset>" <fil.xml> [param=värde ...]
+    // Skriver pluginets tillstånd (samma XML som pluginet sparar) för ett fabrikspreset, med valfria ändringar.
+    // Används av tools/reaper/make_reaper_projects.py för att bygga Reaper-projekt med KrangBox förinställt.
+    if (juce::String (argv[1]) == "--state" && argc > 3)
+    {
+        ParamHost host;
+        krang::StepPattern pattern;
+        krang::TonPattern melody;
+        melody.loadDefault();
+        krang::PresetManager presets (host.state, pattern, &melody);
+        const auto wanted = juce::String::fromUTF8 (argv[2]);
+        int index = -1;
+        for (int i = 0; i < (int) presets.getEntries().size(); ++i)
+            if (presets.getEntries()[(size_t) i].name == wanted) index = i;
+        if (index < 0) { std::cerr << "Okant preset: " << argv[2] << "\n"; return 1; }
+        presets.load (index);
+        for (int a = 4; a < argc; ++a)
+        {
+            const auto arg = juce::String::fromUTF8 (argv[a]);
+            if (arg.startsWith ("melody=")) { melody.fromString (arg.fromFirstOccurrenceOf ("=", false, false)); continue; }
+            auto* param = host.state.getParameter (arg.upToFirstOccurrenceOf ("=", false, false));
+            if (param == nullptr) { std::cerr << "Okand parameter: " << argv[a] << "\n"; return 1; }
+            param->setValueNotifyingHost (param->convertTo0to1 (arg.fromFirstOccurrenceOf ("=", false, false).getFloatValue()));
+        }
+        auto copy = host.state.copyState();
+        krang::PresetManager::writePatterns (copy, pattern, &melody);
+        const auto xml = copy.createXml();
+        if (xml == nullptr) return 1;
+        juce::File out = juce::File::getCurrentWorkingDirectory().getChildFile (argv[3]);
+        out.replaceWithText (xml->toString (juce::XmlElement::TextFormat().singleLine()));
+        return 0;
+    }
+
+    // KrangRender --project <spec.json> <mix.wav>
+    // Renderar en hel komposition (samma som Reaper-projekten i Reaper/) offline: ett KrangBox per spår,
+    // med DAW-transport så att Stegverket, Slingan och synkade ekon följer tempot som i en riktig DAW.
+    if (juce::String (argv[1]) == "--project" && argc > 3)
+    {
+        const auto spec = juce::JSON::parse (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]));
+        if (! spec.isObject()) { std::cerr << "Kunde inte lasa " << argv[2] << "\n"; return 1; }
+        const double sr = 48000.0, bpm = (double) spec["tempo"];
+        const double lengthBeats = (double) spec["lengthBeats"];
+        const int total = (int) (lengthBeats * 60.0 / bpm * sr + sr * 4.0);
+        juce::AudioBuffer<float> mix (2, total);
+        mix.clear();
+        constexpr int block = 256;
+        int problems = 0;
+
+        for (const auto& trackVar : *spec["tracks"].getArray())
+        {
+            ParamHost host;
+            krang::StepPattern pattern;
+            krang::TonPattern melody;
+            melody.loadDefault();
+            krang::PresetManager presets (host.state, pattern, &melody);
+            const auto presetName = trackVar["preset"].toString();
+            int index = -1;
+            for (int i = 0; i < (int) presets.getEntries().size(); ++i)
+                if (presets.getEntries()[(size_t) i].name == presetName) index = i;
+            if (index < 0) { std::cerr << "Okant preset: " << presetName << "\n"; return 1; }
+            presets.load (index);
+            if (auto* overrides = trackVar["overrides"].getDynamicObject())
+                for (const auto& prop : overrides->getProperties())
+                    if (prop.name.toString() == "melody") melody.fromString (prop.value.toString());
+                    else if (auto* param = host.state.getParameter (prop.name.toString()))
+                        param->setValueNotifyingHost (param->convertTo0to1 ((float) (double) prop.value));
+            krang::params::Reader reader (host.state);
+            auto p = reader.read();
+            p.bpm = bpm;
+            p.slingan.tempo = p.stegverket.tempo = bpm;
+
+            // Noterna: [startslag, längd i slag, ton, styrka 0..1].
+            juce::MidiBuffer notes;
+            for (const auto& n : *trackVar["notes"].getArray())
+            {
+                const int start = (int) ((double) n[0] * 60.0 / bpm * sr);
+                const int end = (int) (((double) n[0] + (double) n[1]) * 60.0 / bpm * sr);
+                notes.addEvent (juce::MidiMessage::noteOn (1, (int) n[2], (float) (double) n[3]), start);
+                notes.addEvent (juce::MidiMessage::noteOff (1, (int) n[2]), juce::jmax (start + 1, end - 1));
+            }
+
+            krang::KrangEngine engine;
+            engine.prepare (sr, block);
+            engine.setParams (p);
+            engine.reset();
+            krang::Stegverket seq; seq.prepare (sr);
+            krang::Slingan arp; arp.prepare (sr);
+            krang::TonStegverket tonverk; tonverk.prepare (sr);
+            juce::AudioBuffer<float> out (2, total);
+            out.clear();
+            const double songEnd = lengthBeats * 60.0 / bpm * sr;
+            for (int pos = 0; pos < total; pos += block)
+            {
+                const int n = juce::jmin (block, total - pos);
+                const bool playing = pos < songEnd;
+                krang::Transport t { playing, pos / (sr * 60.0 / bpm), bpm };
+                engine.setTransport (t.hostPlaying, t.ppq, bpm);
+                juce::MidiBuffer midi;
+                midi.addEvents (notes, pos, n, -pos);
+                if (p.chamber == krang::Chamber::Hammarverket) seq.process (pattern, p.stegverket, t, false, n, midi);
+                if (p.chamber != krang::Chamber::Hammarverket) tonverk.process (midi, melody, p.stegverket, p.ton, t, false, n);
+                if (p.chamber == krang::Chamber::Spolslingan)  arp.process (midi, p.slingan, t, n);
+                float* l = out.getWritePointer (0, pos);
+                float* r = out.getWritePointer (1, pos);
+                int local = 0;
+                for (const auto meta : midi)
+                {
+                    const int at = juce::jlimit (0, n, meta.samplePosition);
+                    if (at > local) { engine.render (l + local, r + local, at - local); local = at; }
+                    engine.handleMidi (meta.getMessage());
+                }
+                if (local < n) engine.render (l + local, r + local, n - local);
+            }
+            const auto st = analyse (out);
+            const bool ok = st.finite && st.rmsDb > -40.0f;
+            std::cout << "  " << trackVar["name"].toString() << " (" << presetName << "): topp " << st.peakDb
+                      << " dBFS, RMS " << st.rmsDb << " dBFS  " << (ok ? "OK" : "FEL") << "\n";
+            problems += ok ? 0 : 1;
+            const float gain = juce::Decibels::decibelsToGain ((float) (double) trackVar.getProperty ("gainDb", 0.0));
+            for (int ch = 0; ch < 2; ++ch) mix.addFrom (ch, 0, out, ch, 0, total, gain);
+        }
+
+        // Mixen: en enkel toppbegränsning så att förhandslyssningen inte klipper.
+        const float peak = mix.getMagnitude (0, total);
+        if (peak > 0.89f) mix.applyGain (0.89f / peak);
+        const auto st = analyse (mix);
+        std::cout << "mix: topp " << st.peakDb << " dBFS, RMS " << st.rmsDb << " dBFS (normerad med "
+                  << juce::Decibels::gainToDecibels (peak > 0.89f ? 0.89f / peak : 1.0f) << " dB)\n";
+        writeWav (juce::File::getCurrentWorkingDirectory().getChildFile (argv[3]), mix, sr);
+        return problems == 0 ? 0 : 2;
+    }
+
     const juce::File outDir = juce::File::getCurrentWorkingDirectory().getChildFile (argv[1]);
     outDir.createDirectory();
     const double sr = argc > 2 ? juce::String (argv[2]).getDoubleValue() : 48000.0;
@@ -346,7 +480,8 @@ int main (int argc, char* argv[])
     {
         ParamHost host;
         krang::StepPattern pattern;
-        krang::PresetManager presets (host.state, pattern);
+        krang::TonPattern melody;
+        krang::PresetManager presets (host.state, pattern, &melody);
         krang::params::Reader reader (host.state);
         int bassTotal = 0;
         const auto bassMidi = buildMidi (sr, 112.0, 1, bassTotal);
@@ -357,8 +492,27 @@ int main (int argc, char* argv[])
             const auto p = reader.read();
             juce::MidiBuffer midi;
             int total = bassTotal + (int) sr * 2;
+            const bool hasMelody = krang::presets::factoryPresets()[(size_t) i].melody != nullptr;
 
-            if (p.chamber == krang::Chamber::Hammarverket)
+            if (hasMelody)
+            {
+                // Två varv av melodin genom Tonstegverket på egen klocka, i presetets tempo.
+                krang::TonStegverket seq;
+                seq.prepare (sr);
+                auto st = p.stegverket;
+                st.run = true;
+                const int seqTotal = (int) (2 * st.length * krang::TonStegverket::rateLength (p.ton.rate) * sr * 60.0 / st.tempo);
+                for (int pos = 0; pos < seqTotal + blockSize; pos += blockSize)
+                {
+                    juce::MidiBuffer m;
+                    auto run = st;
+                    run.run = pos < seqTotal;
+                    seq.process (m, melody, run, p.ton, {}, true, blockSize);
+                    midi.addEvents (m, 0, -1, pos);
+                }
+                total = seqTotal + (int) sr * 3;
+            }
+            else if (p.chamber == krang::Chamber::Hammarverket)
             {
                 // Två takter via Stegverket på egen klocka, i presetets tempo och gung.
                 krang::Stegverket seq;
@@ -1293,6 +1447,283 @@ int main (int argc, char* argv[])
             std::cout << "pump_cpu: 8 platar, " << load << " % av en karna i realtid  " << (load < 25.0 ? "OK" : "FEL") << "\n";
             failures += load < 25.0 ? 0 : 1;
             failures += report ("pump_8_platar", analyse (out), latency) ? 0 : 1;
+        }
+    }
+
+    // Modulationsraden: synkad LFO på volymen, Klang som rör ljudet, allt på max och CPU.
+    {
+        // Fyrkants-LFO synkad till 1/4 vid 120 BPM på volymen: var 0,25 s hög, var 0,25 s låg.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Bordunorgeln;
+            p.reverb.mix = 0.0f; p.echo.mix = 0.0f; p.distortion.mix = 0.0f;
+            p.mod.lfo[0].shape = krang::LfoShape::Fyrkant;
+            p.mod.lfo[0].sync = 5;
+            p.mod.slots[0] = { krang::ModSource::Lfo1, krang::ModDest::Volym, 0.5f };
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 48, 0.8f), 0);
+            const auto out = renderEngine (p, midi, (int) (sr * 3.0), sr, blockSize, latency);
+            bool ok = true;
+            juce::String steps;
+            for (int w = 4; w < 10; ++w)    // fönster om 0,25 s från 1 s, mäter mitten av varje
+            {
+                const int s0 = (int) ((w * 0.25 + 0.06) * sr) + latency, n = (int) (0.13 * sr);
+                const float db = juce::Decibels::gainToDecibels (out.getRMSLevel (0, s0, n), -120.0f);
+                const int s1 = (int) (((w + 1) * 0.25 + 0.06) * sr) + latency;
+                const float next = juce::Decibels::gainToDecibels (out.getRMSLevel (0, s1, n), -120.0f);
+                const float diff = (w % 2 == 0) ? db - next : next - db;     // jämna fönster ska vara höga
+                ok = ok && diff > 18.0f;
+                steps << juce::String (db, 1) << " ";
+            }
+            std::cout << "mod_lfo_synk_volym: " << steps << "dB  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+
+        // Envelope 1 på Klang i varje kammare: ljudet ska bli ett annat än utan modulation.
+        const char* names[] = { "basmalen", "hammarverket", "bordunorgeln", "spolslingan", "stalpiano", "klockgjuteriet",
+                                "koren", "radiomasten", "lurblasaren", "lutverket", "vattenpumpen" };
+        for (int c = 0; c < 11; ++c)
+        {
+            krang::EngineParams p;
+            p.chamber = (krang::Chamber) c;
+            p.reverb.mix = 0.0f; p.echo.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, c == 1 ? 36 : 57, 0.8f), 0);
+            midi.addEvent (juce::MidiMessage::noteOff (1, c == 1 ? 36 : 57), (int) (sr * 0.8));
+            const auto plain = renderEngine (p, midi, (int) (sr * 1.0), sr, blockSize, latency);
+            p.mod.env[0] = { 0.2f, 0.3f, 0.6f, 0.3f };
+            // Slagverk bestämmer klangen i anslaget, så där styr anslagsstyrkan; resten får en envelope.
+            const bool struck = c == 1 || c == 4 || c == 5;
+            p.mod.slots[0] = { struck ? krang::ModSource::Anslag : krang::ModSource::Env1, krang::ModDest::Klang, 0.8f };
+            const auto moved = renderEngine (p, midi, (int) (sr * 1.0), sr, blockSize, latency);
+            juce::AudioBuffer<float> diff (1, plain.getNumSamples());
+            diff.copyFrom (0, 0, moved, 0, 0, plain.getNumSamples());
+            diff.addFrom (0, 0, plain, 0, 0, plain.getNumSamples(), -1.0f);
+            const float base = plain.getRMSLevel (0, 0, plain.getNumSamples());
+            const float changeDb = juce::Decibels::gainToDecibels (diff.getRMSLevel (0, 0, diff.getNumSamples()) / juce::jmax (1e-9f, base), -120.0f);
+            const auto st = analyse (moved);
+            const bool ok = changeDb > -20.0f && st.finite && st.peakDb <= 0.0f;
+            std::cout << "mod_klang_" << names[c] << ": skillnad " << changeDb << " dB mot omodulerat  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+
+        // Allt på max: sex kopplingar i botten, Krangspaken i botten, snabba LFO:er – det ska hålla ihop.
+        for (int c = 0; c < 11; ++c)
+        {
+            krang::EngineParams p;
+            p.chamber = (krang::Chamber) c;
+            p.krangspakenRaw = 0.8f;
+            p.mod.lfo[0] = { krang::LfoShape::Slump, 30.0f, 0, false };
+            p.mod.lfo[1] = { krang::LfoShape::Fyrkant, 13.0f, 0, false };
+            p.mod.slots = { krang::ModSlot { krang::ModSource::Lfo1, krang::ModDest::Klang, 1.0f },
+                            krang::ModSlot { krang::ModSource::Lfo2, krang::ModDest::Krangdrive, 1.0f },
+                            krang::ModSlot { krang::ModSource::Lfo1, krang::ModDest::Filterfrekvens, -1.0f },
+                            krang::ModSlot { krang::ModSource::Anslag, krang::ModDest::Volym, 1.0f },
+                            krang::ModSlot { krang::ModSource::Lfo2, krang::ModDest::Eko, 1.0f },
+                            krang::ModSlot { krang::ModSource::Lfo1, krang::ModDest::Krangspaken, 1.0f } };
+            int total = 0;
+            const auto chords = buildChordMidi (sr, 90.0, total);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, chords, total, sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / (total / sr * 1000.0) * 100.0;
+            const auto st = analyse (out);
+            const bool ok = load < 25.0;
+            std::cout << "mod_max_" << names[c] << " cpu " << load << " %  " << (ok ? "" : "FEL ");
+            failures += ok ? 0 : 1;
+            failures += report ((juce::String ("mod_max_") + names[c]).toRawUTF8(), st, latency, st.rmsDb < -4.0f) ? 0 : 1;
+        }
+
+        // DAW-synk: med transport från värden följer LFO:n takten, även när uppspelningen startar mitt i.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Bordunorgeln;
+            p.mod.lfo[0].shape = krang::LfoShape::Sagtand;
+            p.mod.lfo[0].sync = 3; // 1 takt
+            p.mod.slots[0] = { krang::ModSource::Lfo1, krang::ModDest::Volym, 0.5f };
+            krang::KrangEngine engine;
+            engine.prepare (sr, blockSize);
+            engine.setParams (p);
+            engine.reset();
+            float lfoAtBar = 0.0f;
+            for (int b = 0; b < 40; ++b)
+            {
+                const double ppq = 6.0 + b * blockSize / (sr * 0.5);  // startar på slag 6 (mitt i takt 2)
+                engine.setTransport (true, ppq, 120.0);
+                float l[blockSize], r[blockSize];
+                engine.render (l, r, blockSize);
+                if (b == 0) lfoAtBar = engine.getModulation().sourceValue (krang::ModSource::Lfo1);
+            }
+            // Slag 6 är halvvägs i takten: sågtanden (1 → −1 över takten) ska stå nära 0.
+            const bool ok = std::abs (lfoAtBar) < 0.05f;
+            std::cout << "mod_daw_synk: LFO vid slag 6 = " << lfoAtBar << " (vantat 0)  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+    }
+
+    // Tonstegverket: takt, längder, glid, bundna toner, transponering, loopar i DAW:en och alla kammare.
+    {
+        struct Ev { int at; int note; bool on; float vel; };
+        // Kör sekvensern i 'seconds' med egen klocka (eller DAW-transport) och samlar händelserna.
+        auto runSeq = [&] (const krang::TonPattern& pat, krang::StegverketSettings st, krang::TonSettings ts, double seconds,
+                           const juce::MidiBuffer& keys, std::function<krang::Transport (int)> transport = {})
+        {
+            krang::TonStegverket seq;
+            seq.prepare (sr);
+            std::vector<Ev> evs;
+            const int total = (int) (seconds * sr);
+            for (int pos = 0; pos < total; pos += blockSize)
+            {
+                const int n = juce::jmin (blockSize, total - pos);
+                juce::MidiBuffer midi;
+                midi.addEvents (keys, pos, n, -pos);
+                const auto t = transport ? transport (pos) : krang::Transport {};
+                seq.process (midi, pat, st, ts, t, true, n);
+                for (const auto meta : midi)
+                {
+                    const auto m = meta.getMessage();
+                    if (m.isNoteOnOrOff()) evs.push_back ({ pos + meta.samplePosition, m.getNoteNumber(), m.isNoteOn(), m.getFloatVelocity() });
+                }
+            }
+            // Stoppa: allt som klingar ska släppas.
+            juce::MidiBuffer midi;
+            st.run = false;
+            seq.process (midi, pat, st, ts, {}, true, blockSize);
+            for (const auto meta : midi)
+                if (meta.getMessage().isNoteOff()) evs.push_back ({ total + meta.samplePosition, meta.getMessage().getNoteNumber(), false, 0.0f });
+            return evs;
+        };
+        auto hanging = [] (const std::vector<Ev>& evs)
+        {
+            std::map<int, int> open;
+            for (auto& e : evs) open[e.note] += e.on ? 1 : -1;
+            int n = 0;
+            for (auto& [note, c] : open) n += std::abs (c);
+            return n;
+        };
+        krang::StegverketSettings st; st.run = true; st.tempo = 120.0; st.length = 16;
+        krang::TonSettings ts; ts.root = 36;
+        const double stepSamples = sr * 60.0 / 120.0 / 4.0;   // en 16-del vid 120 BPM
+
+        // Takt och längder: "0 . 7/3 . 12/7" → C2 på steg 0 (3/4 steg), G2 på steg 2 (1 steg), C3 på steg 4 (4 steg).
+        {
+            krang::TonPattern pat;
+            pat.fromString ("0 . 7/3 . 12/7 . . . . . . . . . . .");
+            const auto evs = runSeq (pat, st, ts, 1.9, {});
+            auto find = [&] (int note, bool on, int from) { for (auto& e : evs) if (e.note == note && e.on == on && e.at >= from) return e.at; return -1; };
+            const int c2 = find (36, true, 0), c2off = find (36, false, 0), g2 = find (43, true, 0), g2off = find (43, false, 0),
+                      c3 = find (48, true, 0), c3off = find (48, false, 0);
+            const auto near = [&] (int at, double steps) { return std::abs (at - steps * stepSamples) < 2.0; };
+            const bool ok = near (c2, 0) && near (c2off, 0.75) && near (g2, 2) && near (g2off, 3) && near (c3, 4) && near (c3off, 8)
+                            && hanging (evs) == 0;
+            std::cout << "tonsteg_takt: C2 " << c2 << "-" << c2off << ", G2 " << g2 << "-" << g2off << ", C3 " << c3 << "-" << c3off
+                      << " (steg " << stepSamples << " samples)  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+
+        // Glid: tonen hålls kvar in i nästa (överlapp); glid in i samma ton binder ihop utan nytt anslag.
+        {
+            krang::TonPattern pat;
+            pat.fromString ("0~ 5 . . 3~ 3 . . 0 0 . . . . . .");
+            const auto evs = runSeq (pat, st, ts, 1.9, {});
+            int c2off = -1, f2on = -1, ds2ons = 0, c2ons = 0;
+            for (auto& e : evs)
+            {
+                if (e.note == 36 && ! e.on && c2off < 0) c2off = e.at;
+                if (e.note == 41 && e.on && f2on < 0) f2on = e.at;
+                if (e.note == 39 && e.on && e.at < 8 * stepSamples) ++ds2ons;
+                if (e.note == 36 && e.on && e.at >= 8 * stepSamples - 2 && e.at < 16 * stepSamples) ++c2ons;
+            }
+            const bool ok = f2on >= 0 && c2off > f2on && ds2ons == 1 && c2ons == 2 && hanging (evs) == 0;
+            std::cout << "tonsteg_glid: C2 slapps " << c2off << " efter F2 " << f2on << ", D#2 anslag " << ds2ons
+                      << " (bunden), C2 C2 anslag " << c2ons << "  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+
+        // Transponera: E2 på keyboardet flyttar slingan fyra halvtoner och hörs inte själv.
+        {
+            krang::TonPattern pat;
+            pat.fromString ("0 . . . 0 . . . 0 . . . 0 . . .");
+            juce::MidiBuffer keys;
+            keys.addEvent (juce::MidiMessage::noteOn (1, 40, 0.8f), (int) (6 * stepSamples));
+            keys.addEvent (juce::MidiMessage::noteOff (1, 40), (int) (7 * stepSamples));
+            const auto evs = runSeq (pat, st, ts, 1.9, keys);
+            std::vector<int> ons;
+            for (auto& e : evs) if (e.on) ons.push_back (e.note);
+            const bool ok = ons.size() >= 4 && ons[0] == 36 && ons[1] == 36 && ons[2] == 40 && ons[3] == 40 && hanging (evs) == 0;
+            std::cout << "tonsteg_transponera:";
+            for (int n : ons) std::cout << " " << n;
+            std::cout << "  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+
+            ts.keys = krang::TonKeyMode::SpelaMed;
+            const auto evs2 = runSeq (pat, st, ts, 1.9, keys);
+            bool keyThrough = false;
+            for (auto& e : evs2) if (e.note == 40 && e.on) keyThrough = true;
+            std::cout << "tonsteg_spela_med: tangenten hors " << (keyThrough ? "OK" : "FEL") << "\n";
+            failures += keyThrough ? 0 : 1;
+            ts.keys = krang::TonKeyMode::Transponera;
+        }
+
+        // DAW-loop: Reaper hoppar tillbaka mitt i en lång ton – den släpps, inget hänger kvar.
+        {
+            krang::TonPattern pat;
+            pat.fromString ("0/7 . . . 7/7 . . . 3/7 . . . 5/7 . . .");
+            const double loopBeats = 1.5;   // hoppar tillbaka vid 1,5 slag, mitt i G2
+            auto transport = [&] (int pos)
+            {
+                const double beats = pos / (sr * 0.5);
+                return krang::Transport { true, std::fmod (beats, loopBeats), 120.0 };
+            };
+            const auto evs = runSeq (pat, st, ts, 4.0, {}, transport);
+            int maxOpen = 0, open = 0;
+            for (auto& e : evs) { open += e.on ? 1 : -1; maxOpen = juce::jmax (maxOpen, open); }
+            const bool ok = hanging (evs) == 0 && maxOpen <= 2;
+            std::cout << "tonsteg_daw_loop: " << evs.size() << " handelser, max " << maxOpen << " samtidigt  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+
+        // Alla tio melodiska kammare med startmelodin i fyra takter, genom motorn.
+        {
+            const char* names[] = { "basmalen", "", "bordunorgeln", "spolslingan", "stalpiano", "klockgjuteriet",
+                                    "koren", "radiomasten", "lurblasaren", "lutverket", "vattenpumpen" };
+            krang::TonPattern pat;
+            pat.loadDefault();
+            for (int c = 0; c < 11; ++c)
+            {
+                if (c == 1) continue;
+                krang::EngineParams p;
+                p.chamber = (krang::Chamber) c;
+                p.bpm = 120.0;
+                krang::KrangEngine engine;
+                engine.prepare (sr, blockSize);
+                engine.setParams (p);
+                engine.reset();
+                krang::TonStegverket seq;
+                seq.prepare (sr);
+                const int total = (int) (sr * 8.5);
+                juce::AudioBuffer<float> out (2, total);
+                out.clear();
+                for (int pos = 0; pos < total; pos += blockSize)
+                {
+                    const int n = juce::jmin (blockSize, total - pos);
+                    juce::MidiBuffer midi;
+                    auto run = st;
+                    run.run = pos < (int) (sr * 8.0);
+                    seq.process (midi, pat, run, ts, {}, true, n);
+                    float* l = out.getWritePointer (0, pos);
+                    float* r = out.getWritePointer (1, pos);
+                    int local = 0;
+                    for (const auto meta : midi)
+                    {
+                        const int at = juce::jlimit (0, n, meta.samplePosition);
+                        if (at > local) { engine.render (l + local, r + local, at - local); local = at; }
+                        engine.handleMidi (meta.getMessage());
+                    }
+                    if (local < n) engine.render (l + local, r + local, n - local);
+                }
+                writeWav (outDir.getChildFile (juce::String ("krangbox_tonsteg_") + names[c] + ".wav"), out, sr);
+                failures += report ((juce::String ("tonsteg_") + names[c]).toRawUTF8(), analyse (out), latency) ? 0 : 1;
+            }
         }
     }
 

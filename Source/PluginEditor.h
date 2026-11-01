@@ -9,6 +9,8 @@
 #include "PluginProcessor.h"
 #include "ui/KrangStyle.h"
 #include "ui/Panels.h"
+#include "ui/ModulationPanel.h"
+#include "ui/TonStegverketPanel.h"
 
 class KrangBoxEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
@@ -51,16 +53,24 @@ private:
     krang::ui::VattenpumpenPanel pump;
     krang::ui::AngledningenPanel angledningen;
     krang::ui::KaosPanel kaos;
+    krang::ui::ModulationPanel modulation;
+    krang::ui::TonStegverketPanel tonsteg;
 
     // Virtuellt keyboard för att provspela utan MIDI-keyboard.
     juce::MidiKeyboardComponent keyboard;
     juce::TextButton octaveDown { "OKT -" }, octaveUp { "OKT +" };
     juce::Label keyboardHint;
+    // Växlar mellan kammarmodulen, Tonstegverket och Modulationsraden på samma plats.
+    juce::TextButton showChamber { "KAMMARE" }, showSteg { "STEGVERKET" }, showModulation { "MODULATION" };
+    enum class View { Kammare, Steg, Modulation };
+    View view = View::Kammare;
+    int shownModCount = -1;
+    void updateCentreView();
     int keyOctave = 3; // datortangentbordets lägsta C = keyOctave * 12 (3 -> C2)
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> comboAttachments;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> seqRunAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> seqRunAtt, tonRunAtt;
 
     juce::TooltipWindow tooltips { this, 600 };
     std::unique_ptr<juce::AlertWindow> saveDialog;

@@ -222,6 +222,42 @@ inline juce::String VfdDisplay_upper (const juce::String& s)
 // Modulram: graverad rubrik, tunn mässingslist och nitar i hörnen.
 inline void drawModuleFrame (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& title)
 {
+    if (textures::useAgedLook())
+    {
+        // Stilprovet: en unik, åldrad plåt med relief, slitna kanter, repor och rost som rinner från skruvarna.
+        const int seed = textures::aged::seedFor (r);
+        const auto img = textures::aged::makePlate ((int) r.getWidth(), (int) r.getHeight(), seed, 66.0f,
+                                                    juce::Colour (0xff8c8270), 1.0f);
+        {
+            juce::Graphics::ScopedSaveState s (g);
+            juce::Path clip;
+            clip.addRoundedRectangle (r, 6.0f);
+            g.reduceClipRegion (clip);
+            g.drawImage (img, r);
+        }
+        // Plåten ligger infälld: skugga upptill och till vänster, ljus kant nedtill och till höger.
+        g.setColour (juce::Colours::black.withAlpha (0.55f));
+        g.drawLine (r.getX() + 6.0f, r.getY() + 1.0f, r.getRight() - 6.0f, r.getY() + 1.0f, 1.5f);
+        g.drawLine (r.getX() + 1.0f, r.getY() + 6.0f, r.getX() + 1.0f, r.getBottom() - 6.0f, 1.2f);
+        g.setColour (juce::Colours::white.withAlpha (0.10f));
+        g.drawLine (r.getX() + 6.0f, r.getBottom() - 1.5f, r.getRight() - 6.0f, r.getBottom() - 1.5f, 1.0f);
+        g.setColour (colours::brassDark.darker (0.3f));
+        g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.2f);
+        // Graverad titel: mörk fördjupning med ljus underkant, i stället för tryckt text.
+        const auto titleArea = r.withHeight (24.0f).reduced (12.0f, 0);
+        g.setFont (panelFont (12.0f));
+        g.setColour (juce::Colours::black.withAlpha (0.8f));
+        g.drawText (VfdDisplay_upper (title), titleArea.translated (0.0f, -1.0f), juce::Justification::centredLeft);
+        g.setColour (colours::engraving.withAlpha (0.85f));
+        g.drawText (VfdDisplay_upper (title), titleArea, juce::Justification::centredLeft);
+        g.setColour (colours::brass.withAlpha (0.25f));
+        g.drawHorizontalLine ((int) r.getY() + 24, r.getX() + 10.0f, r.getRight() - 10.0f);
+        juce::Random rnd (seed);
+        for (auto p : { r.getTopLeft().translated (6, 6), r.getTopRight().translated (-6, 6),
+                        r.getBottomLeft().translated (6, -6), r.getBottomRight().translated (-6, -6) })
+            textures::aged::drawScrew (g, p, 3.2f, rnd.nextFloat() * 3.14159f);
+        return;
+    }
     textures::fill (g, r, textures::plate(), 1.0f, 6.0f);
     textures::fill (g, r, textures::rust(), 0.25f, 6.0f);
     // Insänkt plåt: mörk kant upptill, ljus nedtill.
