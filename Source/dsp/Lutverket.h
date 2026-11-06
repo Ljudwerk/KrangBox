@@ -13,6 +13,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "Stamning.h"
 #include <array>
 #include <cmath>
 #include <vector>
@@ -38,6 +39,9 @@ struct LutverketParams
 class Lutverket
 {
 public:
+    // Stämningen som kammaren spelar i (sätts av motorn; liksvävande om ingen satts).
+    void setStamning (const Stamning* s) { stamning = s != nullptr ? s : &Stamning::neutral(); }
+    const Stamning* stamning = &Stamning::neutral();
     static constexpr int numVoices = 12, maxStrings = 3;
 
     void prepare (double sampleRate, int)
@@ -184,7 +188,7 @@ private:
         v.level = 1.0f;
         v.quiet = 0;
 
-        const double baseHz = 440.0 * std::pow (2.0, (note - 69) / 12.0);
+        const double baseHz = stamning->hz (note);
         const float vel = 0.3f + 0.7f * velocity;
         // Knäppets ljushet: hårdare knäpp och hårdare anslag ger mer diskant.
         const float exciteCoef = juce::jlimit (0.0f, 0.95f, 0.85f - 0.75f * params.hardness - 0.15f * velocity);
@@ -250,7 +254,7 @@ private:
             if (t.jitter > 0.0f)
             {
                 const float offset = v.numStrings > 1 ? ((float) k - (float) (v.numStrings - 1) * 0.5f) / (float) (v.numStrings - 1) : 0.0f;
-                tune (s, 440.0 * std::pow (2.0, (v.note - 69) / 12.0) * std::exp2 (offset * params.courseCents / 1200.0)
+                tune (s, stamning->hz (v.note) * std::exp2 (offset * params.courseCents / 1200.0)
                          * (1.0 + t.jitter * (double) v.wobble * (1.0 + 0.5 * k)), lpCoef);
             }
             // Dämpning per varv: klingtiden (kortare i diskanten), eller dämparen när tangenten släppts.

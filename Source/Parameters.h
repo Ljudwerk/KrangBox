@@ -64,6 +64,12 @@ namespace id
     inline constexpr auto spArp       = "spArp";
     inline constexpr auto spArpRate   = "spArpRate";
     inline constexpr auto spArpOct    = "spArpOct";
+    inline constexpr auto spArpGate   = "spArpGate";
+    inline constexpr auto spArpLatch  = "spArpLatch";
+    inline constexpr auto spEngine    = "spEngine";
+    inline constexpr auto spPdWave    = "spPdWave";
+    inline constexpr auto spPdAmount  = "spPdAmount";
+    inline constexpr auto spPdDetune  = "spPdDetune";
 
     inline constexpr auto fxMode      = "fxMode";
     inline constexpr auto fxCutoff    = "fxCutoff";
@@ -140,6 +146,47 @@ namespace id
     inline constexpr auto vpRust      = "vpRust";
     inline constexpr auto vpAttack    = "vpAttack";
     inline constexpr auto vpRelease   = "vpRelease";
+    // Ångorgeln
+    inline constexpr auto agType      = "agType";
+    inline constexpr auto agR16       = "agR16";
+    inline constexpr auto agR8        = "agR8";
+    inline constexpr auto agR4        = "agR4";
+    inline constexpr auto agR223      = "agR223";
+    inline constexpr auto agR2        = "agR2";
+    inline constexpr auto agPressure  = "agPressure";
+    inline constexpr auto agChiff     = "agChiff";
+    inline constexpr auto agLeak      = "agLeak";
+    inline constexpr auto agTrem      = "agTrem";
+    inline constexpr auto agAttack    = "agAttack";
+    inline constexpr auto agRelease   = "agRelease";
+    // Speldosan
+    inline constexpr auto sdType      = "sdType";
+    inline constexpr auto sdBox       = "sdBox";
+    inline constexpr auto sdSpring    = "sdSpring";
+    inline constexpr auto sdRust      = "sdRust";
+    inline constexpr auto sdWorks     = "sdWorks";
+    inline constexpr auto sdDecay     = "sdDecay";
+    inline constexpr auto sdHard      = "sdHard";
+    // Automaten
+    inline constexpr auto atWord      = "atWord";
+    inline constexpr auto atVoice     = "atVoice";
+    inline constexpr auto atMonotone  = "atMonotone";
+    inline constexpr auto atTempo     = "atTempo";
+    inline constexpr auto atBroken    = "atBroken";
+    inline constexpr auto atRepeat    = "atRepeat";
+    inline constexpr auto atFigure    = "atFigure";
+    inline constexpr auto atBird      = "atBird";
+    inline constexpr auto atClock     = "atClock";
+    // Krigstuban
+    inline constexpr auto ktBell      = "ktBell";
+    inline constexpr auto ktEnsemble  = "ktEnsemble";
+    inline constexpr auto ktPressure  = "ktPressure";
+    inline constexpr auto ktGrowl     = "ktGrowl";
+    inline constexpr auto ktFlutter   = "ktFlutter";
+    inline constexpr auto ktSwell     = "ktSwell";
+    inline constexpr auto ktFall      = "ktFall";
+    inline constexpr auto ktRumble    = "ktRumble";
+    inline constexpr auto ktRelease   = "ktRelease";
 
     // Modulationsraden: lfo<n><Shape|Rate|Sync|Retrig>, env<n><A|D|S|R>, mod<n><Src|Dst|Amt>.
     inline juce::String lfo (int n, const char* what) { return "lfo" + juce::String (n) + what; }
@@ -158,6 +205,23 @@ namespace id
     inline constexpr auto tpFlutter   = "tpFlutter";
     inline constexpr auto tpAge       = "tpAge";
     inline constexpr auto tpDropout   = "tpDropout";
+    // Megafonen och Gramofonen
+    inline constexpr auto mgAmount    = "mgAmount";
+    inline constexpr auto mgHorn      = "mgHorn";
+    inline constexpr auto mgCrack     = "mgCrack";
+    inline constexpr auto mgHum       = "mgHum";
+    inline constexpr auto grCrackle   = "grCrackle";
+    inline constexpr auto grHiss      = "grHiss";
+    inline constexpr auto grWow       = "grWow";
+    inline constexpr auto grAge       = "grAge";
+    inline constexpr auto grSkip      = "grSkip";
+    inline constexpr auto grGate      = "grGate";
+    inline constexpr auto mgGate      = "mgGate";
+    inline constexpr auto koSpeakerGate = "koSpeakerGate";
+    // Stämningen
+    inline constexpr auto tuSystem    = "tuSystem";
+    inline constexpr auto tuRoot      = "tuRoot";
+    inline constexpr auto tuBlue      = "tuBlue";
 
     inline constexpr auto ecSync      = "ecSync";
     inline constexpr auto ecTime      = "ecTime";
@@ -180,7 +244,7 @@ namespace id
     inline constexpr auto tsRate      = "tsRate";
     inline constexpr auto tsScale     = "tsScale";
 
-    // Hammarverket: hv<röst><Tune|Decay|Level>, t.ex. "hv0Tune". Röstnummer enligt krang::Drum.
+    // Hammarverket: hv<spår><Tune|Decay|Level|Sound>, t.ex. "hv0Tune". Spårnummer enligt krang::Drum.
     inline juce::String drum (int index, const char* what) { return "hv" + juce::String (index) + what; }
 }
 
@@ -215,7 +279,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::chamber, 1 }, "Kammare",
                                                          StringArray { String::fromUTF8 ("Basmålen"), "Hammarverket", "Bordunorgeln", "Spolslingan", String::fromUTF8 ("Stålpiano"), "Klockgjuteriet",
                                                                        String::fromUTF8 ("Kören i schaktet"), "Radiomasten",
-                                                                       String::fromUTF8 ("Lurblåsaren"), "Lutverket", "Vattenpumpen" }, 0));
+                                                                       String::fromUTF8 ("Lurblåsaren"), "Lutverket", "Vattenpumpen",
+                                                                       String::fromUTF8 ("Ångorgeln"), "Speldosan", "Automaten", "Krigstuban" }, 0));
 
     // Basmålen – oscillatorer
     add (id::osc1Level, "Osc 1 Sågtand", { 0.0f, 1.0f }, 0.8f);
@@ -330,6 +395,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     add (id::koVibrato, "Körvibrato",   { 0.0f, 1.0f }, 0.3f);
     add (id::koBreath,  "Andning",      { 0.0f, 1.0f }, 0.2f);
     add (id::koSpeaker, "Trasig högtalare", { 0.0f, 1.0f }, 0.0f);
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::koSpeakerGate, 1 }, String::fromUTF8 ("Högtalaren sprakar"),
+                                                         StringArray { "Alltid", "Vid ljud" }, 1));
     add (id::koAttack,  "Körens insats", time (4.0f), 0.4f, "s");
     add (id::koRelease, "Körens avklang", time (6.0f), 1.2f, "s");
 
@@ -400,6 +467,66 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     add (id::vpAttack,   "Stråkens insats",  time (4.0f), 0.3f, "s");
     add (id::vpRelease,  "Stråkens avklang", time (6.0f), 1.0f, "s");
 
+    // Ångorgeln
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::agType, 1 }, "Orgeltyp",
+                                                         StringArray { "Kyrkorgel", "Kalliope", "Harmonium", "Positiv" }, 0));
+    add (id::agR16,      "Register 16'", { 0.0f, 1.0f }, 0.4f);
+    add (id::agR8,       "Register 8'", { 0.0f, 1.0f }, 1.0f);
+    add (id::agR4,       "Register 4'", { 0.0f, 1.0f }, 0.6f);
+    add (id::agR223,     "Register 2⅔'", { 0.0f, 1.0f }, 0.0f);
+    add (id::agR2,       "Register 2'", { 0.0f, 1.0f }, 0.3f);
+    add (id::agPressure, "Ångtryck", { 0.0f, 1.0f }, 0.75f);
+    add (id::agChiff,    "Pipblås", { 0.0f, 1.0f }, 0.4f);
+    add (id::agLeak,     "Läckage", { 0.0f, 1.0f }, 0.1f);
+    add (id::agTrem,     "Tremulant", { 0.0f, 1.0f }, 0.0f);
+    add (id::agAttack,   "Orgelns insats", time (2.0f), 0.03f, "s");
+    add (id::agRelease,  "Orgelns avklang", time (4.0f), 0.25f, "s");
+
+    // Speldosan
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::sdType, 1 }, "Speldosa",
+                                                         StringArray { "Speldosa", "Kyrkspeldosa", "Glasdosa" }, 0));
+    add (id::sdBox,    "Låda", { 0.0f, 1.0f }, 0.5f);
+    add (id::sdSpring, "Fjäder", { 0.0f, 1.0f }, 0.2f);
+    add (id::sdRust,   "Speldosans rost", { 0.0f, 1.0f }, 0.1f);
+    add (id::sdWorks,  "Verk", { 0.0f, 1.0f }, 0.2f);
+    {
+        NormalisableRange<float> dr (0.25f, 4.0f); dr.setSkewForCentre (1.0f);
+        add (id::sdDecay, "Speldosans klingtid", dr, 1.0f, "x");
+    }
+    add (id::sdHard,   "Stift", { 0.0f, 1.0f }, 0.5f);
+
+    // Automaten
+    {
+        StringArray words;
+        for (int w = 0; w < krang::numAutomatWords; ++w) words.add (String::fromUTF8 (krang::automatWord (w)));
+        words.add ("Tangenterna");
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::atWord, 1 }, "Ord", words, 0));
+    }
+    add (id::atVoice,    "Röst", { 0.0f, 1.0f }, 0.4f);
+    add (id::atMonotone, "Monoton", { 0.0f, 1.0f }, 0.6f);
+    add (id::atTempo,    "Taltempo", { 0.0f, 1.0f }, 0.5f);
+    add (id::atBroken,   "Trasig", { 0.0f, 1.0f }, 0.1f);
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::atRepeat, 1 }, "Upprepa",
+                                                         StringArray { "Av", String::fromUTF8 ("På") }, 0));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::atFigure, 1 }, "Automatens figur",
+                                                         StringArray { "Talmaskinen", String::fromUTF8 ("Sångfågeln"), "Urverket" }, 0));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::atBird, 1 }, String::fromUTF8 ("Fågel"),
+                                                         StringArray { String::fromUTF8 ("Kanariefågel"), String::fromUTF8 ("Näktergal"), String::fromUTF8 ("Lärka"), "Trast" }, 0));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::atClock, 1 }, "Ur",
+                                                         StringArray { "Fickur", "Pendelur", String::fromUTF8 ("Gökur"), "Klockspelsur" }, 1));
+
+    // Krigstuban
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::ktBell, 1 }, "Tratt",
+                                                         StringArray { String::fromUTF8 ("Mässing"), "Ljudtratt", "Megafon" }, 0));
+    add (id::ktEnsemble, "Orkester", { 0.0f, 1.0f }, 0.5f);
+    add (id::ktPressure, "Lufttryck", { 0.0f, 1.0f }, 0.6f);
+    add (id::ktGrowl,    "Morr", { 0.0f, 1.0f }, 0.2f);
+    add (id::ktFlutter,  "Fladder", { 0.0f, 1.0f }, 0.0f);
+    add (id::ktSwell,    "Svällning", { 0.0f, 1.0f }, 0.3f);
+    add (id::ktFall,     "Fall", { 0.0f, 1.0f }, 0.3f);
+    add (id::ktRumble,   "Mullret", { 0.0f, 1.0f }, 0.3f);
+    add (id::ktRelease,  "Krigstubans avklang", time (4.0f), 0.5f, "s");
+
     // Modulationsraden
     for (int n = 1; n <= 2; ++n)
     {
@@ -462,6 +589,30 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     add (id::tpFlutter, "Flutter", { 0.0f, 1.0f }, 0.0f);
     add (id::tpAge,     "Bandålder", { 0.0f, 1.0f }, 0.0f);
     add (id::tpDropout, "Avbrott", { 0.0f, 1.0f }, 0.0f);
+    add (id::mgAmount, "Megafon", { 0.0f, 1.0f }, 0.0f);
+    add (id::mgHorn,   "Megafonens tratt", { 0.0f, 1.0f }, 0.5f);
+    add (id::mgCrack,  "Sprucket membran", { 0.0f, 1.0f }, 0.3f);
+    add (id::mgHum,    "Nätbrum", { 0.0f, 1.0f }, 0.2f);
+    add (id::grCrackle, "Knaster", { 0.0f, 1.0f }, 0.0f);
+    add (id::grHiss,    "Ytbrus", { 0.0f, 1.0f }, 0.0f);
+    add (id::grWow,     "Varvtal", { 0.0f, 1.0f }, 0.0f);
+    add (id::grAge,     "Skivans ålder", { 0.0f, 1.0f }, 0.0f);
+    add (id::grSkip,    "Hack", { 0.0f, 1.0f }, 0.0f);
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::grGate, 1 }, String::fromUTF8 ("Gramofonen spelar"),
+                                                         StringArray { "Alltid", "Vid ljud" }, 1));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::mgGate, 1 }, "Megafonen brummar",
+                                                         StringArray { "Alltid", "Vid ljud" }, 1));
+
+    // Stämningen: system, grundton (eller Bordunorgelns bordunton) och blå toner.
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::tuSystem, 1 }, String::fromUTF8 ("Stämning"),
+                                                         StringArray { String::fromUTF8 ("Liksvävande"), String::fromUTF8 ("Ren stämning"),
+                                                                       "Pytagoreisk", "Medeltonig", "Naturtoner" }, 0));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::tuRoot, 1 }, String::fromUTF8 ("Stämningens grundton"),
+                                                         StringArray { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H",
+                                                                       "Bordunen" }, 12));
+    p.push_back (std::make_unique<P> (ParameterID { id::tuBlue, 1 }, String::fromUTF8 ("Blå toner"), NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+                                      AudioParameterFloatAttributes().withLabel ("%")
+                                          .withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)); })));
 
     // Ekokammaren
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::ecSync, 1 }, "Ekotakt",
@@ -556,10 +707,24 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         add (id::spGrainMs, "Kornstorlek", { 10.0f, 300.0f, 0.0f, 0.5f }, 80.0f, "ms");
         add (id::spSpread,  "Spridning", { 0.0f, 1.0f }, 0.4f);
         p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::spArp, 1 }, "Slinga",
-                                                             StringArray { "Av", "Upp", "Ned", "Upp/ned", "Slump" }, 0));
+                                                             StringArray { "Av", "Upp", "Ned", "Upp/ned", "Slump", "Som spelat", "Ackord",
+                                                                           String::fromUTF8 ("Tvärs"), "Trappa" }, 0));
         p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::spArpRate, 1 }, "Slingtakt",
                                                              StringArray { "1/8", "1/16", "1/16T", "1/32" }, 1));
         add (id::spArpOct, "Oktaver", { 1.0f, 3.0f, 1.0f }, 1.0f);
+        p.push_back (std::make_unique<P> (ParameterID { id::spArpGate, 1 }, String::fromUTF8 ("Slingans tonlängd"), NormalisableRange<float> (0.1f, 1.0f), 0.5f,
+                                          AudioParameterFloatAttributes().withLabel ("%")
+                                              .withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)); })));
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::spArpLatch, 1 }, String::fromUTF8 ("Slingan fäst"),
+                                                             StringArray { "Av", String::fromUTF8 ("På") }, 0));
+        // Fasvridaren (CZ-stil) som alternativ till FM-spolen
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::spEngine, 1 }, "Spolens motor",
+                                                             StringArray { "FM-spolen", "Fasvridaren" }, 0));
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::spPdWave, 1 }, String::fromUTF8 ("Fasvridarens våg"),
+                                                             StringArray { String::fromUTF8 ("Sågtand"), "Fyrkant", "Puls", "Dubbelsinus",
+                                                                           String::fromUTF8 ("Resonant såg"), "Resonant triangel", "Resonant trapets" }, 0));
+        add (id::spPdAmount, "Vridning", { 0.0f, 1.0f }, 0.7f);
+        add (id::spPdDetune, "Svävning", { 0.0f, 50.0f }, 0.0f, "cent");
     }
 
     // Hammarverket
@@ -580,6 +745,14 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                           NormalisableRange<float> (0.0f, 1.0f), 0.8f,
                                           AudioParameterFloatAttributes().withStringFromValueFunction (dec (2))));
     }
+    // Ljud per spår (sexton att välja på); standard = spårets ursprungliga ljud.
+    {
+        StringArray sounds;
+        for (int k = 0; k < krang::numDrumSounds; ++k) sounds.add (String::fromUTF8 (krang::drumSoundName (k)));
+        for (int d = 0; d < krang::numDrums; ++d)
+            p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id::drum (d, "Sound"), 1 },
+                                                                 "Spår " + String (d + 1) + " ljud", sounds, d));
+    }
 
     return { p.begin(), p.end() };
 }
@@ -596,6 +769,19 @@ public:
             drumTune[(size_t) d]  = s.getRawParameterValue (id::drum (d, "Tune"));
             drumDecay[(size_t) d] = s.getRawParameterValue (id::drum (d, "Decay"));
             drumLevel[(size_t) d] = s.getRawParameterValue (id::drum (d, "Level"));
+            drumSound[(size_t) d] = s.getRawParameterValue (id::drum (d, "Sound"));
+        }
+        for (int n = 0; n < 2; ++n)
+        {
+            int i = 0;
+            for (auto* what : { "Shape", "Rate", "Sync", "Retrig" }) lfoParams[(size_t) n][(size_t) i++] = s.getRawParameterValue (id::lfo (n + 1, what));
+            i = 0;
+            for (auto* what : { "A", "D", "S", "R" }) envParams[(size_t) n][(size_t) i++] = s.getRawParameterValue (id::menv (n + 1, what));
+        }
+        for (int n = 0; n < 6; ++n)
+        {
+            int i = 0;
+            for (auto* what : { "Src", "Dst", "Amt" }) slotParams[(size_t) n][(size_t) i++] = s.getRawParameterValue (id::slot (n + 1, what));
         }
     }
 
@@ -664,6 +850,7 @@ public:
         ko.vibrato     = v (id::koVibrato);
         ko.breath      = v (id::koBreath);
         ko.speaker     = v (id::koSpeaker);
+        ko.speakerGated = v (id::koSpeakerGate) > 0.5f;
         ko.attackSec   = v (id::koAttack);
         ko.releaseSec  = v (id::koRelease);
 
@@ -712,22 +899,65 @@ public:
         vp.attackSec  = v (id::vpAttack);
         vp.releaseSec = v (id::vpRelease);
 
+        auto& ag = e.organ;
+        ag.type = (OrganType) (int) v (id::agType);
+        ag.ranks = { v (id::agR16), v (id::agR8), v (id::agR4), v (id::agR223), v (id::agR2) };
+        ag.pressure   = v (id::agPressure);
+        ag.chiff      = v (id::agChiff);
+        ag.leak       = v (id::agLeak);
+        ag.tremulant  = v (id::agTrem);
+        ag.attackSec  = v (id::agAttack);
+        ag.releaseSec = v (id::agRelease);
+
+        auto& sd = e.dosa;
+        sd.type     = (SpeldosaType) (int) v (id::sdType);
+        sd.box      = v (id::sdBox);
+        sd.spring   = v (id::sdSpring);
+        sd.rust     = v (id::sdRust);
+        sd.works    = v (id::sdWorks);
+        sd.decay    = v (id::sdDecay);
+        sd.hardness = v (id::sdHard);
+
+        auto& at = e.automat;
+        at.word     = (int) v (id::atWord);
+        at.voice    = v (id::atVoice);
+        at.monotone = v (id::atMonotone);
+        at.tempo    = v (id::atTempo);
+        at.broken   = v (id::atBroken);
+        at.repeat   = v (id::atRepeat) > 0.5f;
+        at.figure   = (AutomatFigure) (int) v (id::atFigure);
+        at.bird     = (BirdType) (int) v (id::atBird);
+        at.clock    = (ClockType) (int) v (id::atClock);
+
+        auto& kt = e.tuba;
+        kt.bell       = (TubaBell) (int) v (id::ktBell);
+        kt.ensemble   = v (id::ktEnsemble);
+        kt.pressure   = v (id::ktPressure);
+        kt.growl      = v (id::ktGrowl);
+        kt.flutter    = v (id::ktFlutter);
+        kt.swell      = v (id::ktSwell);
+        kt.fall       = v (id::ktFall);
+        kt.rumble     = v (id::ktRumble);
+        kt.releaseSec = v (id::ktRelease);
+
         for (int n = 0; n < 2; ++n)
         {
             auto& l = e.mod.lfo[(size_t) n];
-            l.shape     = (LfoShape) (int) v (id::lfo (n + 1, "Shape"));
-            l.rateHz    = v (id::lfo (n + 1, "Rate"));
-            l.sync      = (int) v (id::lfo (n + 1, "Sync"));
-            l.retrigger = v (id::lfo (n + 1, "Retrig")) > 0.5f;
-            auto& en = e.mod.env[(size_t) n];
-            en = { v (id::menv (n + 1, "A")), v (id::menv (n + 1, "D")), v (id::menv (n + 1, "S")), v (id::menv (n + 1, "R")) };
+            const auto& lp = lfoParams[(size_t) n];
+            l.shape     = (LfoShape) (int) lp[0]->load();
+            l.rateHz    = lp[1]->load();
+            l.sync      = (int) lp[2]->load();
+            l.retrigger = lp[3]->load() > 0.5f;
+            const auto& ep = envParams[(size_t) n];
+            e.mod.env[(size_t) n] = { ep[0]->load(), ep[1]->load(), ep[2]->load(), ep[3]->load() };
         }
         for (int n = 0; n < 6; ++n)
         {
             auto& sl = e.mod.slots[(size_t) n];
-            sl.source = (ModSource) (int) v (id::slot (n + 1, "Src"));
-            sl.dest   = (ModDest) (int) v (id::slot (n + 1, "Dst"));
-            sl.amount = v (id::slot (n + 1, "Amt"));
+            const auto& sp = slotParams[(size_t) n];
+            sl.source = (ModSource) (int) sp[0]->load();
+            sl.dest   = (ModDest) (int) sp[1]->load();
+            sl.amount = sp[2]->load();
         }
 
         e.kaos.amount  = v (id::kaAmount);
@@ -742,6 +972,12 @@ public:
         e.tape.flutter = v (id::tpFlutter);
         e.tape.age     = v (id::tpAge);
         e.tape.dropout = v (id::tpDropout);
+        e.megafon  = { v (id::mgAmount), v (id::mgHorn), v (id::mgCrack), v (id::mgHum), v (id::mgGate) > 0.5f };
+        {
+            const int root = (int) v (id::tuRoot);
+            e.stamning = { (TuningSystem) (int) v (id::tuSystem), root >= 12 ? (int) v (id::boDroneNote) : root, v (id::tuBlue) };
+        }
+        e.gramofon = { v (id::grCrackle), v (id::grHiss), v (id::grWow), v (id::grAge), v (id::grSkip), v (id::grGate) > 0.5f };
 
         e.echo.sync     = (int) v (id::ecSync);
         e.echo.timeMs   = v (id::ecTime);
@@ -770,6 +1006,12 @@ public:
         e.slingan.mode    = (ArpMode) (int) v (id::spArp);
         e.slingan.rate    = (int) v (id::spArpRate);
         e.slingan.octaves = (int) v (id::spArpOct);
+        e.slingan.gate    = v (id::spArpGate);
+        e.slingan.latch   = v (id::spArpLatch) > 0.5f;
+        sp.engine   = (SpolEngine) (int) v (id::spEngine);
+        sp.pdWave   = (PdWave) (int) v (id::spPdWave);
+        sp.pdAmount = v (id::spPdAmount);
+        sp.pdDetune = v (id::spPdDetune);
 
         auto& bo = e.bordunorgeln;
         bo.timbre      = v (id::boTimbre);
@@ -797,6 +1039,7 @@ public:
             dp.tune  = drumTune[k]->load();
             dp.decay = drumDecay[k]->load();
             dp.level = drumLevel[k]->load();
+            dp.sound = (int) drumSound[k]->load();
         }
         e.krangspakenRaw = krangspaken; // motorn lägger på spaken efter modulationen
         return e;
@@ -805,7 +1048,9 @@ public:
 private:
     float v (juce::StringRef pid) const { return state.getRawParameterValue (pid)->load(); }
     juce::AudioProcessorValueTreeState& state;
-    std::array<std::atomic<float>*, (size_t) numDrums> drumTune {}, drumDecay {}, drumLevel {};
+    std::array<std::atomic<float>*, (size_t) numDrums> drumTune {}, drumDecay {}, drumLevel {}, drumSound {};
+    std::array<std::array<std::atomic<float>*, 4>, 2> lfoParams {}, envParams {};
+    std::array<std::array<std::atomic<float>*, 3>, 6> slotParams {};
 };
 
 } // namespace krang::params

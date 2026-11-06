@@ -12,6 +12,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "Stamning.h"
 #include <array>
 #include <cmath>
 
@@ -36,6 +37,9 @@ struct VattenpumpenParams
 class Vattenpumpen
 {
 public:
+    // Stämningen som kammaren spelar i (sätts av motorn; liksvävande om ingen satts).
+    void setStamning (const Stamning* s) { stamning = s != nullptr ? s : &Stamning::neutral(); }
+    const Stamning* stamning = &Stamning::neutral();
     static constexpr int numVoices = 8;
 
     void prepare (double sampleRate, int)
@@ -183,7 +187,7 @@ private:
     // Räknar om resonatorerna: tonhöjd (glid, vibrato, vatten) en gång per block.
     void updateCoefficients (Voice& v, float vibCents)
     {
-        const double baseHz = 440.0 * std::pow (2.0, (v.currentNote - 69.0f + vibCents / 100.0f) / 12.0);
+        const double baseHz = stamning->hz (v.currentNote) * std::exp2 (vibCents / 1200.0);
         for (int k = 0; k < v.numModes; ++k)
         {
             const double f = baseHz * v.ratio[(size_t) k] * std::exp2 (v.slosh[(size_t) k] / 1200.0f);
@@ -226,7 +230,7 @@ private:
             v.slosh[(size_t) k] += (v.sloshTarget[(size_t) k] - v.slosh[(size_t) k]) * (float) (numSamples / (sr * 0.35)); // vattnet skvalpar mjukt
         updateCoefficients (v, vibCents);
 
-        const double f0 = 440.0 * std::pow (2.0, (v.currentNote - 69.0f + vibCents / 100.0f) / 12.0);
+        const double f0 = stamning->hz (v.currentNote) * std::exp2 (vibCents / 1200.0);
         const float slipSharp = 1.0f + 12.0f * pressure;                        // högre tryck: kortare, skarpare släpp
         const float noiseAmt = 0.15f + 0.6f * pressure * pressure;
         const float drive = (0.4f + 0.6f * params.speed) * (0.5f + 0.5f * v.velocity) * 3.0f;

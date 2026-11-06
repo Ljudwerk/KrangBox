@@ -13,6 +13,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "Stamning.h"
 #include <array>
 #include <cmath>
 #include <vector>
@@ -39,6 +40,9 @@ struct LurblasarenParams
 class Lurblasaren
 {
 public:
+    // Stämningen som kammaren spelar i (sätts av motorn; liksvävande om ingen satts).
+    void setStamning (const Stamning* s) { stamning = s != nullptr ? s : &Stamning::neutral(); }
+    const Stamning* stamning = &Stamning::neutral();
     static constexpr int numVoices = 6;
 
     void prepare (double sampleRate, int)
@@ -150,7 +154,7 @@ private:
     void renderVoice (Voice& v, float* dest, int numSamples)
     {
         const double twoPi = juce::MathConstants<double>::twoPi;
-        const double noteHz = 440.0 * std::pow (2.0, (v.note - 69) / 12.0);
+        const double noteHz = stamning->hz (v.note);
         const float tension = juce::jlimit (0.0f, 1.0f, params.tension);
         const float rasp = juce::jlimit (0.0f, 1.0f, params.rasp) + (v.type == WindType::Bockhorn ? 0.25f : 0.0f);
         const float noiseGain = params.noise * 0.3f + rasp * 0.1f;

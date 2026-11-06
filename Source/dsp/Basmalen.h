@@ -6,6 +6,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "Stamning.h"
 #include <array>
 #include <cmath>
 
@@ -35,6 +36,9 @@ struct BasmalenParams
 class Basmalen
 {
 public:
+    // Stämningen som kammaren spelar i (sätts av motorn; liksvävande om ingen satts).
+    void setStamning (const Stamning* s) { stamning = s != nullptr ? s : &Stamning::neutral(); }
+    const Stamning* stamning = &Stamning::neutral();
     void prepare (double sampleRate, int maxBlockSize)
     {
         sr = sampleRate;
@@ -132,7 +136,7 @@ public:
                 const double baseNote = currentNote + bendSemis + driftSemis;
 
                 const double f1  = noteToHz (baseNote);
-                const double f2  = noteToHz (baseNote + params.osc2Semi + params.osc2Fine * 0.01);
+                const double f2  = noteToHz (baseNote + params.osc2Semi) * std::exp2 (params.osc2Fine * 0.01 / 12.0);
                 const double fs  = f1 * 0.5;
                 const double dt1 = f1 / sr, dt2 = f2 / sr, dts = fs / sr;
 
@@ -176,7 +180,7 @@ public:
     bool isActive() const { return ampEnv.isActive(); }
 
 private:
-    static double noteToHz (double note) { return 440.0 * std::pow (2.0, (note - 69.0) / 12.0); }
+    double noteToHz (double note) const { return stamning->hz (note); }
 
     static double polyBlep (double t, double dt)
     {

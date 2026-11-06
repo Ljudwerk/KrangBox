@@ -1,4 +1,4 @@
-// Krang-panelen (fas 2): hela gränssnittet ritas i en fast designstorlek (1200 × 970)
+// Krang-panelen (fas 2): hela gränssnittet ritas i en fast designstorlek (1200 × 840)
 // och skalas proportionellt när fönstret ändrar storlek (60–160 %).
 //
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
@@ -21,7 +21,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    static constexpr int designWidth = 1200, designHeight = 970;
+    static constexpr int designWidth = 1200, designHeight = 840;
 
 private:
     void timerCallback() override;
@@ -51,6 +51,10 @@ private:
     krang::ui::LurblasarenPanel lur;
     krang::ui::LutverketPanel lut;
     krang::ui::VattenpumpenPanel pump;
+    krang::ui::AngorgelnPanel organ;
+    krang::ui::SpeldosanPanel dosa;
+    krang::ui::AutomatenPanel automat;
+    krang::ui::KrigstubanPanel tuba;
     krang::ui::AngledningenPanel angledningen;
     krang::ui::KaosPanel kaos;
     krang::ui::ModulationPanel modulation;
@@ -60,9 +64,10 @@ private:
     juce::MidiKeyboardComponent keyboard;
     juce::TextButton octaveDown { "OKT -" }, octaveUp { "OKT +" };
     juce::Label keyboardHint;
-    // Växlar mellan kammarmodulen, Tonstegverket och Modulationsraden på samma plats.
-    juce::TextButton showChamber { "KAMMARE" }, showSteg { "STEGVERKET" }, showModulation { "MODULATION" };
-    enum class View { Kammare, Steg, Modulation };
+    // Växlar mellan kammarmodulen, Tonstegverket, Modulationsraden och kaosavdelningen på samma plats.
+    juce::TextButton showChamber { "KAMMARE" }, showSteg { "STEGVERKET" }, showModulation { "MODULATION" }, showKaos { "KAOS" };
+    enum class View { Kammare, Steg, Modulation, Kaos };
+    int kaosFlash = 0;   // KAOS-knappen lyser upp en stund när Kaosmotorn slår till
     View view = View::Kammare;
     int shownModCount = -1;
     void updateCentreView();

@@ -1,0 +1,22 @@
+namn: Längtan i smedjan
+tempo: 125
+takter: 4
+takt: 4/4
+upplösning: 16
+swing: 0
+mänsklig: 2 6
+fröet: 3
+# Rammstein: tät, maskinmässig drivkraft – bastrumma med dubbelslag, virvel på 2 och 4, plåt på ettan
+ångslaget:   X..xX.x.X..xX.x.
+smedjan:     ....X.......X...
+ventilen:    x.xox.xox.xox.xo
+skrotplåten stäm=-3 längd=5: X............... ................ X............... ................
+# Hedningarna: ramtrumman i punkterade åttondelar (3 mot 4) och skedar som knarrar emellan
+ramtrumman stäm=-2: x..x..x..x..x.o.
+träskedarna: ...o..o....o..oo
+# Fill i takt 4: virvelvirvel, ramtrumman tar över, ångröret öppnar mot nästa etta
+ångslaget@4:   X..xX.x.X.X.X.X.
+smedjan@4:     ....X...x.xXrrtt
+ramtrumman@4:  x..x..x.XxXxXXXX
+ventilen@4:    x.xox.xo........
+ångröret@4:    ..............X.

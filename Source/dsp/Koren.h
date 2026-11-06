@@ -13,6 +13,8 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "Stamning.h"
+#include "Brusgrind.h"
 #include <array>
 #include <cmath>
 
@@ -30,6 +32,7 @@ struct KorenParams
     float vibrato    = 0.3f;   // 0..1
     float breath     = 0.2f;   // andning 0..1
     float speaker    = 0.0f;   // trasig högtalare 0..1
+    bool  speakerGated = true; // true = högtalaren sprakar bara när kören sjunger, false = hela tiden
     float attackSec  = 0.4f;
     float releaseSec = 1.2f;
 };
@@ -37,6 +40,9 @@ struct KorenParams
 class Koren
 {
 public:
+    // Stämningen som kammaren spelar i (sätts av motorn; liksvävande om ingen satts).
+    void setStamning (const Stamning* s) { stamning = s != nullptr ? s : &Stamning::neutral(); }
+    const Stamning* stamning = &Stamning::neutral();
     static constexpr int numVoices = 8, maxSingers = 8, numFormants = 5;
 
     void prepare (double sampleRate, int)
@@ -59,6 +65,7 @@ public:
         speakerLp.setType (juce::dsp::StateVariableTPTFilterType::lowpass);
         speakerLp.setCutoffFrequency (3200.0f);
         speakerLp.setResonance (1.4f);
+        grind.prepare (sampleRate);
         reset();
     }
 
@@ -71,6 +78,7 @@ public:
         }
         speakerHp.reset(); speakerLp.reset();
         crackleGain = 1.0f; crackleTarget = 1.0f; crackleTimer = 0;
+        grind.reset();
     }
 
     void setParams (const KorenParams& p)
@@ -228,7 +236,7 @@ private:
         const bool kulning = params.voices == ChoirVoices::Kulning;
         const int singers = kulning ? 1 : juce::jlimit (1, maxSingers, params.singers);
         const float singerGain = 1.0f / std::sqrt ((float) singers);
-        const double baseHz = 440.0 * std::pow (2.0, (v.note - 69) / 12.0);
+        const double baseHz = stamning->hz (v.note);
         const float vibDepth = params.vibrato * (kulning ? 25.0f : 45.0f); // cent
         const float lpCoef = std::exp (-juce::MathConstants<float>::twoPi * 3500.0f / (float) sr); // stämbandens lutning (strålning från munnen lyfter diskanten igen)
 
@@ -313,6 +321,7 @@ private:
         const float drive = 1.0f + 8.0f * h;
         for (int i = 0; i < numSamples; ++i)
         {
+            const float g = params.speakerGated ? grind.next (std::abs (d[i])) : 1.0f;
             float x = speakerLp.processSample (0, speakerHp.processSample (0, d[i]));
             x = std::tanh (x * drive) / std::sqrt (drive) * 1.6f;
 
@@ -323,7 +332,7 @@ private:
                 crackleTimer = (int) (sr * (glapp ? 0.01 + 0.06 * random.nextFloat() : 0.05 + 0.4 * random.nextFloat()));
             }
             crackleGain += (crackleTarget - crackleGain) * 0.02f;
-            const float crackle = random.nextFloat() < 0.002f * h ? (random.nextFloat() - 0.5f) * 0.5f * h : 0.0f;
+            const float crackle = random.nextFloat() < 0.002f * h ? (random.nextFloat() - 0.5f) * 0.5f * h * g : 0.0f;
             x = x * crackleGain + crackle;
             d[i] += (x - d[i]) * h;
         }
@@ -333,6 +342,7 @@ private:
     KorenParams params;
     std::array<Voice, numVoices> voices;
     juce::dsp::StateVariableTPTFilter<float> speakerHp, speakerLp;
+    Brusgrind grind;
     float crackleGain = 1.0f, crackleTarget = 1.0f;
     int crackleTimer = 0;
     juce::uint32 ageCounter = 0;

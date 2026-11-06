@@ -44,7 +44,7 @@ def seq(names, start, step, length=None, vel=0.75):
 # --- Kompositionerna -------------------------------------------------------------------------
 
 def kammartest():
-    """Alla elva kammare i tur och ordning, fyra takter var, med sitt grundpreset: lyssningstestet för grind 3."""
+    """Alla femton kammare i tur och ordning, fyra takter var, med sitt grundpreset: lyssningstestet för grind 3."""
     tracks, beat = [], 0
     def add(name, preset, notes, **ov):
         tracks.append({'name': name, 'preset': preset, 'notes': notes, 'overrides': ov})
@@ -67,7 +67,12 @@ def kammartest():
     add('Lurblåsaren', 'Init Lurblåsaren', seq('D4 F4 A4 - G4 F4 E4 D4 - - C4 D4 - - - .', 128, 1.0))
     add('Lutverket', 'Init Lutverket', seq('D3 A3 D4 F4 A4 F4 D4 A3 C3 G3 C4 E4 G4 E4 C4 G3', 144, 1.0, 1.5))
     add('Vattenpumpen', 'Init Vattenpumpen', chord('D3', 160, 7) + chord('A3', 168, 7))
-    return {'title': 'KrangBox – kammartest', 'tempo': 100, 'lengthBeats': 180, 'masterDb': -2, 'tracks': tracks}
+    add('Ångorgeln', 'Init Ångorgeln', chord('D3 F3 A3 D4', 176, 4) + chord('C3 E3 G3 C4', 180, 4)
+        + chord('A2 E3 A3 C#4', 184, 4) + chord('D3 F3 A3 D4', 188, 4))
+    add('Speldosan', 'Init Speldosan', seq('A5 D6 F6 E6 D6 . A5 . G5 C6 E6 D6 C6 . A5 .', 192, 1.0, 0.9))
+    add('Automaten', 'Talande tangenter', seq('B4 . F4 . D4 . C#4 . C4 - - . . . . .', 208, 1.0, 0.5))
+    add('Krigstuban', 'Init Krigstuban', chord('D2', 224, 3.5) + chord('F2', 228, 3.5) + chord('A1', 232, 7))
+    return {'title': 'KrangBox – kammartest', 'tempo': 100, 'lengthBeats': 244, 'masterDb': -2, 'tracks': tracks}
 
 def ruinens_psalm():
     """72 BPM, D-dorisk: kör, bordun, kyrkklockor, en näverlur i naturtoner och en avlägsen radiostation."""
@@ -157,12 +162,62 @@ def tonverket():
         {'name': 'Kulning', 'preset': 'Kulningsslingan', 'notes': transpose(60), 'overrides': {'seqRun': 1, 'tsRoot': 60}, 'gainDb': -5},
     ]}
 
+def karusellen():
+    """96 BPM i tretakt: en karusell i ruinerna. Kalliopen spelar valsen, speldosan spelar sin egen slinga
+    i Reapers takt (Tonstegverket), Folkdansens trummor, Automaten som ropar ut på varje fras, ett gökur som
+    tickar genom hela låten och en mekanisk näktergal som sjunger i andra halvan."""
+    beats = 96
+    vals = []
+    for bar, ch in enumerate(['D3 F3 A3', 'D3 F3 A3', 'C3 E3 G3', 'A2 C#3 E3'] * 8):
+        root = ch.split()[0]
+        vals += [[bar * 3, 0.9, n(root), 0.8]] + chord(' '.join(ch.split()[1:]), bar * 3 + 1, 0.5, 0.6) \
+                + chord(' '.join(ch.split()[1:]), bar * 3 + 2, 0.5, 0.6)
+    melody = seq('A4 - D5 F5 E5 D5 C5 - E5 A4 - - D5 - F5 A5 G5 F5 E5 - C#5 D5 - - '
+                 'A4 - D5 F5 E5 D5 C5 - E5 A4 - - D5 E5 F5 E5 D5 C#5 D5 - - . . .', 24, 1.0, None, 0.8)
+    drums = []
+    for bar in range(32):
+        b = bar * 3
+        drums += [[b, 0.5, 36, 1.0], [b + 1, 0.5, 42, 0.6], [b + 2, 0.5, 42, 0.6]]
+        if bar % 2 == 1:
+            drums += [[b + 2.5, 0.25, 37, 0.7]]
+    calls = []
+    for k, note in enumerate([72, 77, 71, 65, 72, 77, 74, 71]):   # KRANG, ROST, DOKTOR KRANG, FOLKET …
+        calls.append([24 + k * 9, 0.4, note, 0.9])
+    return {'title': 'Karusellen i ruinerna', 'tempo': 96, 'beatsPerBar': 3, 'lengthBeats': beats, 'tracks': [
+        {'name': 'Trummor', 'preset': 'Folkdans med bjällror', 'notes': drums, 'gainDb': -3},
+        {'name': 'Vals', 'preset': 'Karusellen', 'notes': vals, 'gainDb': -4},
+        {'name': 'Melodi', 'preset': 'Karusellen', 'notes': melody, 'gainDb': -2},
+        {'name': 'Speldosa', 'preset': 'Speldosans vals', 'notes': [], 'overrides': {'seqRun': 1}, 'gainDb': -6},
+        {'name': 'Automaten', 'preset': 'Talande tangenter', 'notes': calls, 'gainDb': -4},
+        {'name': 'Gökuret', 'preset': 'Gökuret', 'notes': [[0, 90, n('D4'), 0.8]], 'gainDb': -6},
+        {'name': 'Sångfågeln', 'preset': 'Näktergalen i ruinen', 'notes': [[48, 12, n('A4'), 0.8], [72, 15, n('D5'), 0.8]], 'gainDb': -8},
+    ]}
+
+def krigstuban():
+    """84 BPM: domedagen. Krigstubans marsch i Stegverket i Reapers takt, smedjans trummor, ljudtrattar som
+    svarar på avstånd och ett BRAAM från hela mässingsmuren var fjärde takt."""
+    braam = []
+    for bar in range(0, 16, 4):
+        braam += chord('D1 A1 D2', bar * 4, 3.5, 0.95)
+    braam += chord('A#0 F1 A#1', 60, 4, 1.0)
+    distant = []
+    for bar in range(2, 16, 4):
+        distant += chord('F3', bar * 4 + 2, 1.5, 0.7) + chord('E3', bar * 4 + 3.5, 0.5, 0.6)
+    return {'title': 'Krigstubans marsch', 'tempo': 84, 'lengthBeats': 64, 'tracks': [
+        {'name': 'Trummor', 'preset': 'Smedjegång', 'notes': [], 'overrides': {'seqRun': 1}, 'gainDb': -4},
+        {'name': 'Marschen', 'preset': 'Marschen i ruinerna', 'notes': [], 'overrides': {'seqRun': 1, 'tsRoot': 38}, 'gainDb': -2},
+        {'name': 'BRAAM', 'preset': 'Domedagens BRAAM', 'notes': braam, 'gainDb': -3},
+        {'name': 'Ljudtrattarna', 'preset': 'Ljudtrattarna', 'notes': distant, 'gainDb': -8},
+    ]}
+
 COMPOSITIONS = {
     '01-kammartest': kammartest,
     '02-ruinens-psalm': ruinens_psalm,
     '03-maskinhallen': maskinhallen,
     '04-folkdans-i-ruinerna': folkdans,
     '05-tonverket-i-natten': tonverket,
+    '06-karusellen-i-ruinerna': karusellen,
+    '07-krigstubans-marsch': krigstuban,
 }
 
 # --- Reaper-formatet ---------------------------------------------------------------------
@@ -208,7 +263,7 @@ def make_rpp(comp, states):
     seconds = beats * 60.0 / tempo
     out = ['<REAPER_PROJECT 0.1 "7.84/macOS-arm64" 0 0',
            '  <NOTES 0 2', '    |%s – byggd av tools/reaper/make_reaper_projects.py' % comp['title'], '  >',
-           '  TEMPO %g 4 4 0' % tempo, '  SAMPLERATE 48000 0 0', '  LOOP 0',
+           '  TEMPO %g %d 4 0' % (tempo, comp.get('beatsPerBar', 4)), '  SAMPLERATE 48000 0 0', '  LOOP 0',
            '  MASTER_VOLUME %.6f 0 -1 -1 1' % (10 ** (comp.get('masterDb', -6) / 20.0)),
            '  SELECTION 0 %g' % seconds, '  CURSOR 0']
     for track, (state_xml, program) in zip(comp['tracks'], states):

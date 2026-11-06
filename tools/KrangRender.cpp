@@ -531,7 +531,9 @@ int main (int argc, char* argv[])
             else if (p.chamber == krang::Chamber::Bordunorgeln || p.chamber == krang::Chamber::Stalpiano
                      || p.chamber == krang::Chamber::Klockgjuteriet || p.chamber == krang::Chamber::Koren
                      || p.chamber == krang::Chamber::Radiomasten || p.chamber == krang::Chamber::Lurblasaren
-                     || p.chamber == krang::Chamber::Lutverket || p.chamber == krang::Chamber::Vattenpumpen)
+                     || p.chamber == krang::Chamber::Lutverket || p.chamber == krang::Chamber::Vattenpumpen
+                     || p.chamber == krang::Chamber::Angorgeln || p.chamber == krang::Chamber::Speldosan
+                     || p.chamber == krang::Chamber::Automaten || p.chamber == krang::Chamber::Krigstuban)
             {
                 midi = buildChordMidi (sr, 80.0, total);
             }
@@ -565,7 +567,9 @@ int main (int argc, char* argv[])
             const auto label = juce::String ("preset_") + juce::String (i + 1).paddedLeft ('0', 2) + "_"
                              + presets.getEntries()[(size_t) i].name;
             // Ett preset ska höras ordentligt men inte slå i taket hela tiden.
-            const bool levelOk = s.rmsDb > -16.0f && s.rmsDb < -7.0f; // presets ska ligga ungefär lika starkt
+            // Presets ska ligga ungefär lika starkt. Uren tickar glest – för dem räcker det att topparna hörs.
+            const bool sparse = p.chamber == krang::Chamber::Automaten && p.automat.figure == krang::AutomatFigure::Urverket;
+            const bool levelOk = sparse ? (s.peakDb > -12.0f && s.rmsDb < -7.0f) : (s.rmsDb > -16.0f && s.rmsDb < -7.0f);
             failures += report (label.toRawUTF8(), s, latency, levelOk) ? 0 : 1;
             writeWav (outDir.getChildFile ("krangbox_" + label.replace (" ", "_") + ".wav"), out, sr);
         }
@@ -1724,6 +1728,924 @@ int main (int argc, char* argv[])
                 writeWav (outDir.getChildFile (juce::String ("krangbox_tonsteg_") + names[c] + ".wav"), out, sr);
                 failures += report ((juce::String ("tonsteg_") + names[c]).toRawUTF8(), analyse (out), latency) ? 0 : 1;
             }
+        }
+    }
+
+    // Hammarverket utbyggt: sexton ljud, fyra kit, chans, ratchets och parameterlås.
+    {
+        // Varje ljud för sig på spår 1, torrt – nivå och att det tystnar.
+        for (int k = 0; k < krang::numDrumSounds; ++k)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Hammarverket;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            p.hammarverket.drums[0].sound = k;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (10, 36, 1.0f), 100);
+            const auto out = renderEngine (p, midi, (int) (sr * 4.0), sr, blockSize, latency);
+            const auto st = analyse (out);
+            const float tail = juce::Decibels::gainToDecibels (out.getMagnitude (0, (int) (sr * 3.5), (int) (sr * 0.5)), -120.0f);
+            const auto name = juce::String ("ljud_") + juce::String (k).paddedLeft ('0', 2) + "_" + juce::String::fromUTF8 (krang::drumSoundName (k));
+            failures += report (name.toRawUTF8(), st, latency, st.peakDb > -14.0f && tail < -60.0f) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + name + ".wav"), out, sr);
+        }
+
+        // Varje kit med startmönstret i två takter, och CPU med alla åtta spår.
+        for (int k = 0; k < krang::numDrumKits; ++k)
+        {
+            krang::StepPattern pat;
+            pat.loadDefault();
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Hammarverket;
+            for (int d = 0; d < krang::numDrums; ++d) p.hammarverket.drums[(size_t) d].sound = krang::drumKit (k)[(size_t) d];
+            krang::Stegverket seq; seq.prepare (sr);
+            krang::StegverketSettings st; st.run = true; st.tempo = 112.0;
+            juce::MidiBuffer midi;
+            const int seqTotal = (int) (8 * sr * 60.0 / st.tempo);
+            for (int pos = 0; pos < seqTotal; pos += blockSize)
+            {
+                juce::MidiBuffer m;
+                seq.process (pat, st, {}, true, juce::jmin (blockSize, seqTotal - pos), m);
+                midi.addEvents (m, 0, -1, pos);
+            }
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, seqTotal + (int) sr, sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / ((seqTotal + sr) / sr * 1000.0) * 100.0;
+            const auto name = juce::String ("kit_") + juce::String::fromUTF8 (krang::drumKitName (k));
+            std::cout << name << " cpu " << load << " %  ";
+            failures += report (name.toRawUTF8(), analyse (out), latency, load < 15.0) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + name + ".wav"), out, sr);
+        }
+
+        // Kör Stegverket och samlar händelserna: (sample, status, data1, data2).
+        auto runDrums = [&] (const krang::StepPattern& pat, double seconds)
+        {
+            krang::Stegverket seq; seq.prepare (sr);
+            krang::StegverketSettings st; st.run = true; st.tempo = 120.0; st.length = 16;
+            std::vector<std::array<int, 4>> evs;
+            const int total = (int) (seconds * sr);
+            for (int pos = 0; pos < total; pos += blockSize)
+            {
+                juce::MidiBuffer m;
+                seq.process (pat, st, {}, true, juce::jmin (blockSize, total - pos), m);
+                for (const auto meta : m)
+                {
+                    const auto msg = meta.getMessage();
+                    evs.push_back ({ pos + meta.samplePosition, msg.isNoteOn() ? 1 : 0, msg.isNoteOn() ? msg.getNoteNumber() : msg.getControllerNumber(),
+                                     msg.isNoteOn() ? msg.getVelocity() : msg.getControllerValue() });
+                }
+            }
+            return evs;
+        };
+        const double stepSamples = sr * 60.0 / 120.0 / 4.0;
+
+        // Chans: 25 % på varje steg i 64 varv ska ge ungefär en fjärdedel av slagen.
+        {
+            krang::StepPattern pat;
+            pat.fromString ("1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}1{c3}");
+            const auto evs = runDrums (pat, 64 * 2.0);
+            int hits = 0;
+            for (auto& e : evs) if (e[1] == 1) ++hits;
+            const auto evs2 = runDrums (pat, 64 * 2.0);
+            int hits2 = 0;
+            for (auto& e : evs2) if (e[1] == 1) ++hits2;
+            const double share = hits / (64.0 * 16.0);
+            const bool ok = share > 0.2 && share < 0.3 && hits == hits2;
+            std::cout << "steg_chans_25: " << hits << " av 1024 (" << share * 100.0 << " %), samma vid omspelning " << (hits == hits2 ? "ja" : "nej")
+                      << "  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+
+        // Ratchet: ×4 på steg 0 ger fyra slag jämnt fördelade över steget.
+        {
+            krang::StepPattern pat;
+            pat.fromString ("1{r3}000000000000000");
+            const auto evs = runDrums (pat, 0.4);
+            std::vector<int> at;
+            for (auto& e : evs) if (e[1] == 1 && e[0] < stepSamples * 2) at.push_back (e[0]);
+            bool ok = at.size() == 4;
+            for (size_t i = 0; ok && i < at.size(); ++i) ok = std::abs (at[i] - (int) (i * stepSamples / 4.0)) <= 1;
+            std::cout << "steg_ratchet_4:";
+            for (int a : at) std::cout << " " << a;
+            std::cout << " (steg " << stepSamples << ")  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+
+        // Parameterlås: CC för stämning och klang kommer före slaget, på samma sample.
+        {
+            krang::StepPattern pat;
+            pat.fromString ("1{t+12d6}000100000000000");
+            const auto evs = runDrums (pat, 0.6);
+            bool ok = evs.size() >= 4 && evs[0][1] == 0 && evs[0][2] == krang::lockTuneCC && evs[0][3] == 76
+                      && evs[1][2] == krang::lockDecayCC && evs[1][3] == 6 && evs[2][1] == 1 && evs[2][0] == evs[0][0]
+                      && evs[3][1] == 1;   // steg 3 utan lås: bara slaget
+            std::cout << "steg_las_cc: " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+
+            // Och ljudet: Städet med stämningslås +12 klingar en oktav högre (1180 → 2360 Hz).
+            auto peakHz = [&] (const juce::AudioBuffer<float>& b, double lo, double hi)
+            {
+                const float* d = b.getReadPointer (0);
+                const int s0 = (int) (0.05 * sr), n = (int) (0.2 * sr);
+                double best = 0.0, bestHz = 0.0;
+                for (double f = lo; f <= hi; f += 2.0)
+                {
+                    double re = 0.0, im = 0.0;
+                    for (int i = 0; i < n; i += 2)
+                    {
+                        const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+                        re += d[s0 + i] * w * std::cos (juce::MathConstants<double>::twoPi * f * i / sr);
+                        im += d[s0 + i] * w * std::sin (juce::MathConstants<double>::twoPi * f * i / sr);
+                    }
+                    if (re * re + im * im > best) { best = re * re + im * im; bestHz = f; }
+                }
+                return bestHz;
+            };
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Hammarverket;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f; p.hammarverket.rost = 0.0f;
+            p.hammarverket.drums[0].sound = (int) krang::DrumSound::Stadet;
+            juce::MidiBuffer plain, locked;
+            plain.addEvent (juce::MidiMessage::noteOn (10, 36, 1.0f), 0);
+            locked.addEvent (juce::MidiMessage::controllerEvent (10, krang::lockTuneCC, 76), 0);
+            locked.addEvent (juce::MidiMessage::noteOn (10, 36, 1.0f), 0);
+            locked.addEvent (juce::MidiMessage::noteOn (10, 36, 1.0f), (int) (sr * 0.5));   // nästa slag utan lås
+            const auto a = renderEngine (p, plain, (int) (sr * 0.4), sr, blockSize, latency);
+            const auto b = renderEngine (p, locked, (int) (sr * 1.0), sr, blockSize, latency);
+            juce::AudioBuffer<float> second (1, (int) (sr * 0.4));
+            second.copyFrom (0, 0, b, 0, (int) (sr * 0.5), (int) (sr * 0.4));
+            const double fa = peakHz (a, 1000.0, 1400.0), fb = peakHz (b, 2200.0, 2600.0), fc = peakHz (second, 1000.0, 1400.0);
+            const bool ok2 = std::abs (fb / fa - 2.0) < 0.01 && std::abs (fc / fa - 1.0) < 0.01;
+            std::cout << "steg_las_stamning: " << fa << " Hz -> " << fb << " Hz med lås, " << fc << " Hz nästa slag  " << (ok2 ? "OK" : "FEL") << "\n";
+            failures += ok2 ? 0 : 1;
+        }
+
+        // Mönstret som text: tillägg sparas och läses tillbaka; gamla mönster med bara siffror fungerar som förut.
+        {
+            krang::StepPattern a, b;
+            a.fromString ("2{c1r2t-7d3}01{c3}/0001{t+0}");
+            b.fromString (a.toString());
+            const auto s0 = b.getStep (0, 0), s2 = b.getStep (0, 2), s13 = b.getStep (1, 3);
+            const bool ok = s0.gate == 2 && s0.chance == 1 && s0.ratchet == 2 && s0.tuneLocked && s0.tune == -7 && s0.decay == 3
+                            && s2.gate == 1 && s2.chance == 3 && s13.tuneLocked && s13.tune == 0 && a.toString() == b.toString();
+            krang::StepPattern old;
+            old.fromString ("2000100020001000/0101");
+            const bool okOld = old.get (0, 0) == 2 && old.get (0, 4) == 1 && old.get (1, 1) == 1 && ! old.getStep (0, 0).hasExtras();
+            std::cout << "steg_text: " << (ok && okOld ? "OK" : "FEL") << "\n";
+            failures += ok && okOld ? 0 : 1;
+        }
+    }
+
+    // Spolslingan: Fasvridaren (CZ) och Slingans nya lägen.
+    {
+        auto bandEnergy = [&] (const juce::AudioBuffer<float>& b, double f0)
+        {
+            // Energi i grundtonen och i övertonerna 2–20, med ett Hann-fönster på 0,2 s mitt i tonen.
+            const float* d = b.getReadPointer (0);
+            const int s0 = (int) (0.3 * sr), n = (int) (0.2 * sr);
+            auto bin = [&] (double f)
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; ++i)
+                {
+                    const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+                    re += d[s0 + i] * w * std::cos (juce::MathConstants<double>::twoPi * f * i / sr);
+                    im += d[s0 + i] * w * std::sin (juce::MathConstants<double>::twoPi * f * i / sr);
+                }
+                return re * re + im * im;
+            };
+            double harm = 0.0;
+            for (int h = 2; h <= 20; ++h) harm += bin (f0 * h);
+            return std::pair<double, double> { bin (f0), harm };
+        };
+        const char* waves[] = { "sagtand", "fyrkant", "puls", "dubbelsinus", "res_sag", "res_triangel", "res_trapets" };
+        for (int w = 0; w < 7; ++w)
+        {
+            auto render = [&] (float amount, int note)
+            {
+                krang::EngineParams p;
+                p.chamber = krang::Chamber::Spolslingan;
+                p.distortion.mix = 0.0f; p.reverb.mix = 0.0f; p.echo.mix = 0.0f;
+                p.spolslingan.engine = krang::SpolEngine::Fasvridning;
+                p.spolslingan.pdWave = (krang::PdWave) w;
+                p.spolslingan.pdAmount = amount;
+                p.spolslingan.indexDecay = 2.0f;
+                p.spolslingan.releaseSec = 0.1f;
+                juce::MidiBuffer midi;
+                midi.addEvent (juce::MidiMessage::noteOn (1, note, 0.8f), 0);
+                midi.addEvent (juce::MidiMessage::noteOff (1, note), (int) (sr * 0.6));
+                return renderEngine (p, midi, (int) (sr * 1.0), sr, blockSize, latency);
+            };
+            const auto soft = render (0.0f, 57), hard = render (1.0f, 57);
+            const auto [f0s, hs] = bandEnergy (soft, 220.0);
+            const auto [f0h, hh] = bandEnergy (hard, 220.0);
+            const double softDb = 10.0 * std::log10 (hs / juce::jmax (1e-20, f0s)), hardDb = 10.0 * std::log10 (hh / juce::jmax (1e-20, f0h));
+            const bool resonant = w >= 4;
+            const bool ok = hardDb > softDb + 10.0 && (resonant || softDb < -25.0);
+            std::cout << "cz_" << waves[w] << ": overtoner " << softDb << " dB (vridning 0) -> " << hardDb << " dB (vridning 1)  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+            const auto high = render (1.0f, 96);   // C7: ska inte bli brus eller skena
+            failures += report ((juce::String ("cz_hog_") + waves[w]).toRawUTF8(), analyse (high), latency) ? 0 : 1;
+
+            // Ackord genom hela kedjan, med svävning.
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Spolslingan;
+            p.spolslingan.engine = krang::SpolEngine::Fasvridning;
+            p.spolslingan.pdWave = (krang::PdWave) w;
+            p.spolslingan.pdDetune = 12.0f;
+            int total = 0;
+            const auto chords = buildChordMidi (sr, 90.0, total);
+            const auto music = renderEngine (p, chords, total, sr, blockSize, latency);
+            failures += report ((juce::String ("cz_ackord_") + waves[w]).toRawUTF8(), analyse (music), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile (juce::String ("krangbox_cz_") + waves[w] + ".wav"), music, sr);
+        }
+
+        // Slingans lägen: håll G, C, E (i den ordningen) och se vilka toner som kommer.
+        auto runArp = [&] (krang::SlinganSettings st, const juce::MidiBuffer& keys, double seconds)
+        {
+            krang::Slingan arp; arp.prepare (sr);
+            std::vector<std::array<int, 3>> evs;   // sample, not, på/av
+            const int total = (int) (seconds * sr);
+            for (int pos = 0; pos < total; pos += blockSize)
+            {
+                const int n = juce::jmin (blockSize, total - pos);
+                juce::MidiBuffer m;
+                m.addEvents (keys, pos, n, -pos);
+                arp.process (m, st, {}, n);
+                for (const auto meta : m)
+                    if (meta.getMessage().isNoteOnOrOff())
+                        evs.push_back ({ pos + meta.samplePosition, meta.getMessage().getNoteNumber(), meta.getMessage().isNoteOn() ? 1 : 0 });
+            }
+            return evs;
+        };
+        juce::MidiBuffer keys;
+        keys.addEvent (juce::MidiMessage::noteOn (1, 67, 0.8f), 0);
+        keys.addEvent (juce::MidiMessage::noteOn (1, 60, 0.8f), 0);
+        keys.addEvent (juce::MidiMessage::noteOn (1, 64, 0.8f), 0);
+        const double stepSamples = sr * 60.0 / 120.0 / 4.0;
+        struct Case { krang::ArpMode mode; const char* name; std::vector<int> expect; };
+        for (const auto& c : { Case { krang::ArpMode::SomSpelat, "som_spelat", { 67, 60, 64, 67, 60, 64 } },
+                               Case { krang::ArpMode::Tvars, "tvars", { 60, 67, 64, 60, 67, 64 } },
+                               Case { krang::ArpMode::Trappa, "trappa", { 60, 67, 64, 60, 67, 64 } } })
+        {
+            krang::SlinganSettings st; st.mode = c.mode; st.tempo = 120.0;
+            const auto evs = runArp (st, keys, 6 * stepSamples / sr + 0.01);
+            std::vector<int> ons;
+            for (auto& e : evs) if (e[2] == 1) ons.push_back (e[1]);
+            ons.resize (juce::jmin (ons.size(), c.expect.size()));
+            const bool ok = ons == c.expect;
+            std::cout << "slinga_" << c.name << ":";
+            for (int n : ons) std::cout << " " << n;
+            std::cout << "  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+        // Ackord: alla tre tonerna på varje steg, med tonlängd 25 %.
+        {
+            krang::SlinganSettings st; st.mode = krang::ArpMode::Ackord; st.tempo = 120.0; st.gate = 0.25f;
+            const auto evs = runArp (st, keys, 2 * stepSamples / sr + 0.01);
+            int onsAt0 = 0, offsAtQuarter = 0;
+            for (auto& e : evs)
+            {
+                if (e[2] == 1 && e[0] == 0) ++onsAt0;
+                if (e[2] == 0 && std::abs (e[0] - (int) (stepSamples * 0.25)) <= 1) ++offsAtQuarter;
+            }
+            const bool ok = onsAt0 == 3 && offsAtQuarter == 3;
+            std::cout << "slinga_ackord: " << onsAt0 << " toner pa steg 0, " << offsAtQuarter << " slapps efter 25 %  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+        // Fäst: släpp tangenterna – slingan fortsätter; nytt ackord ersätter det gamla; utan Fäst tystnar den.
+        {
+            juce::MidiBuffer k2;
+            k2.addEvent (juce::MidiMessage::noteOn (1, 60, 0.8f), 0);
+            k2.addEvent (juce::MidiMessage::noteOff (1, 60), (int) (stepSamples * 2));
+            k2.addEvent (juce::MidiMessage::noteOn (1, 48, 0.8f), (int) (stepSamples * 8));
+            k2.addEvent (juce::MidiMessage::noteOff (1, 48), (int) (stepSamples * 9));
+            krang::SlinganSettings st; st.mode = krang::ArpMode::Upp; st.tempo = 120.0; st.latch = true;
+            const auto evs = runArp (st, k2, 12 * stepSamples / sr);
+            int c4After = 0, c3After = 0, c4Late = 0;
+            for (auto& e : evs)
+            {
+                if (e[2] != 1) continue;
+                if (e[1] == 60 && e[0] > stepSamples * 3 && e[0] < stepSamples * 8) ++c4After;
+                if (e[1] == 48 && e[0] > stepSamples * 9) ++c3After;
+                if (e[1] == 60 && e[0] > stepSamples * 8.5) ++c4Late;
+            }
+            st.latch = false;
+            const auto evs2 = runArp (st, k2, 6 * stepSamples / sr);
+            int c4Unlatched = 0;
+            for (auto& e : evs2) if (e[2] == 1 && e[1] == 60 && e[0] > stepSamples * 2.5) ++c4Unlatched;
+            const bool ok = c4After >= 4 && c3After >= 2 && c4Late == 0 && c4Unlatched == 0;
+            std::cout << "slinga_fast: " << c4After << " C4 efter slapp, " << c3After << " C3 efter nytt ackord, " << c4Late
+                      << " gamla kvar, " << c4Unlatched << " utan Fast  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+    }
+
+    // De tre nya kamrarna: Ångorgeln, Speldosan och Automaten.
+    {
+        auto pitchNear = [&] (const juce::AudioBuffer<float>& b, double from, double len, double lo, double hi)
+        {
+            const float* d = b.getReadPointer (0);
+            const int s0 = (int) (from * sr), n = (int) (len * sr);
+            double best = 0.0, bestHz = 0.0;
+            for (double f = lo; f <= hi; f += lo * 0.0003)
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; i += 2)
+                {
+                    const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+                    const double ph = juce::MathConstants<double>::twoPi * f * i / sr;
+                    re += d[s0 + i] * w * std::cos (ph);
+                    im += d[s0 + i] * w * std::sin (ph);
+                }
+                if (re * re + im * im > best) { best = re * re + im * im; bestHz = f; }
+            }
+            return bestHz;
+        };
+        auto bottom = [] (krang::EngineParams p) { krang::applyKrangspaken (p, 1.0f); return p; };
+
+        // Ångorgeln: 8' ensam på A3 med fullt tryck ska stå på 220 Hz; varje orgeltyp genom ackord; allt i botten; CPU.
+        const char* organs[] = { "kyrkorgel", "kalliope", "harmonium", "positiv" };
+        for (int t = 0; t < 4; ++t)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Angorgeln;
+            p.organ.type = (krang::OrganType) t;
+            p.organ.ranks = { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+            p.organ.pressure = 1.0f; p.organ.leak = 0.0f; p.organ.tremulant = 0.0f;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 57, 0.8f), 0);
+            const auto out = renderEngine (p, midi, (int) (sr * 1.2), sr, blockSize, latency);
+            const double hz = pitchNear (out, 0.5, 0.5, 200.0, 240.0);
+            const double cents = 1200.0 * std::log2 (hz / 220.0);
+            const bool ok = std::abs (cents) < 8.0 + (t == 1 ? 10.0 : 0.0);
+            std::cout << "orgel_" << organs[t] << ": " << hz << " Hz (" << cents << " cent)  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+
+            krang::EngineParams q;
+            q.chamber = krang::Chamber::Angorgeln;
+            q.organ.type = (krang::OrganType) t;
+            int total = 0;
+            const auto chords = buildChordMidi (sr, 70.0, total);
+            const auto music = renderEngine (q, chords, total, sr, blockSize, latency);
+            failures += report ((juce::String ("orgel_ackord_") + organs[t]).toRawUTF8(), analyse (music), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile (juce::String ("krangbox_orgel_") + organs[t] + ".wav"), music, sr);
+            q.organ.ranks = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+            const auto wild = renderEngine (bottom (q), chords, total, sr, blockSize, latency);
+            const auto sw = analyse (wild);
+            failures += report ((juce::String ("orgel_botten_") + organs[t]).toRawUTF8(), sw, latency, sw.rmsDb < -4.0f) ? 0 : 1;
+        }
+        // Trycket sjunker när många toner hålls och trycket är lågt.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Angorgeln;
+            p.organ.ranks = { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+            p.organ.pressure = 0.3f; p.organ.leak = 0.0f;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            juce::MidiBuffer one, many;
+            one.addEvent (juce::MidiMessage::noteOn (1, 57, 0.8f), 0);
+            many.addEvent (juce::MidiMessage::noteOn (1, 57, 0.8f), 0);
+            for (int n : { 60, 64, 67, 71, 74, 77, 81 }) many.addEvent (juce::MidiMessage::noteOn (1, n, 0.8f), 0);
+            const auto a = renderEngine (p, one, (int) (sr * 6.0), sr, blockSize, latency);
+            const auto b = renderEngine (p, many, (int) (sr * 6.0), sr, blockSize, latency);
+            const double fa = pitchNear (a, 4.5, 1.0, 200.0, 225.0), fb = pitchNear (b, 4.5, 1.0, 200.0, 225.0);
+            const bool ok = fb < fa - 0.5;
+            std::cout << "orgel_trycket_sjunker: en ton " << fa << " Hz, åtta toner " << fb << " Hz  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Angorgeln;
+            p.organ.ranks = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+            juce::MidiBuffer midi;
+            for (int n = 0; n < 12; ++n) midi.addEvent (juce::MidiMessage::noteOn (1, 36 + n * 3, 0.8f), n * 64);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            std::cout << "orgel_cpu: 12 toner x 5 register, " << load << " % av en karna  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ("orgel_60_pipor", analyse (out), latency) ? 0 : 1;
+        }
+
+        // Speldosan: rätt ton för varje dosa, en melodi, allt i botten och CPU.
+        const char* dosor[] = { "speldosa", "kyrkspeldosa", "glasdosa" };
+        for (int t = 0; t < 3; ++t)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Speldosan;
+            p.dosa.type = (krang::SpeldosaType) t;
+            p.dosa.spring = 0.0f; p.dosa.rust = 0.0f; p.dosa.works = 0.0f;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 69, 0.8f), 0);
+            midi.addEvent (juce::MidiMessage::noteOff (1, 69), 1000);
+            const auto out = renderEngine (p, midi, (int) (sr * 1.0), sr, blockSize, latency);
+            const double hz = pitchNear (out, 0.1, 0.4, 420.0, 460.0);
+            const double cents = 1200.0 * std::log2 (hz / 440.0);
+            const auto st = analyse (out);
+            const bool ok = std::abs (cents) < 6.0 && st.peakDb > -20.0f;
+            std::cout << "speldosa_" << dosor[t] << ": " << hz << " Hz (" << cents << " cent), topp " << st.peakDb << " dB  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+
+            krang::EngineParams q;
+            q.chamber = krang::Chamber::Speldosan;
+            q.dosa.type = (krang::SpeldosaType) t;
+            int total = 0;
+            const auto midiMelody = buildMidi (sr, 140.0, 2, total);
+            juce::MidiBuffer high;
+            for (const auto meta : midiMelody)
+            {
+                auto m = meta.getMessage();
+                if (m.isNoteOnOrOff()) m.setNoteNumber (m.getNoteNumber() + 36);
+                high.addEvent (m, meta.samplePosition);
+            }
+            const auto music = renderEngine (q, high, total + (int) sr * 2, sr, blockSize, latency);
+            failures += report ((juce::String ("speldosa_melodi_") + dosor[t]).toRawUTF8(), analyse (music), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile (juce::String ("krangbox_speldosa_") + dosor[t] + ".wav"), music, sr);
+            const auto wild = renderEngine (bottom (q), high, total + (int) sr * 2, sr, blockSize, latency);
+            const auto sw = analyse (wild);
+            failures += report ((juce::String ("speldosa_botten_") + dosor[t]).toRawUTF8(), sw, latency, sw.rmsDb < -4.0f) ? 0 : 1;
+        }
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Speldosan;
+            juce::MidiBuffer midi;
+            for (int n = 0; n < 200; ++n) midi.addEvent (juce::MidiMessage::noteOn (1, 60 + (n * 7) % 36, 0.8f), n * (int) (sr * 0.05));
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            std::cout << "speldosa_cpu: 20 stavar per sekund, " << load << " % av en karna  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ("speldosa_snabbt", analyse (out), latency) ? 0 : 1;
+        }
+
+        // Automaten: varje ord för sig (ska höras, och sluta av sig självt), tangenterna väljer ord, upprepa, botten, CPU.
+        for (int w = 0; w < krang::numAutomatWords; ++w)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Automaten;
+            p.automat.word = w;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 48, 0.9f), 0);
+            midi.addEvent (juce::MidiMessage::noteOff (1, 48), (int) (sr * 0.3));
+            const auto out = renderEngine (p, midi, (int) (sr * 3.0), sr, blockSize, latency);
+            const auto st = analyse (out);
+            const float tail = juce::Decibels::gainToDecibels (out.getMagnitude (0, (int) (sr * 2.5), (int) (sr * 0.5)), -120.0f);
+            const auto name = juce::String ("automat_") + juce::String (w).paddedLeft ('0', 2) + "_"
+                            + juce::String::fromUTF8 (krang::automatWord (w)).replace (" ", "_");
+            failures += report (name.toRawUTF8(), st, latency, st.peakDb > -18.0f && tail < -60.0f) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + name + ".wav"), out, sr);
+        }
+        {
+            // Tangenterna: en mening, ett ord per slag.
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Automaten;
+            p.automat.word = krang::numAutomatWords;
+            p.automat.tempo = 0.7f;
+            juce::MidiBuffer midi;
+            int pos = 0;
+            for (int n : { 60 + 11, 60 + 5, 60 + 2, 60 + 1, 60 + 0 })  // DOKTOR KRANG, ROST, HJÄLP, MASKIN, KRANG
+            {
+                midi.addEvent (juce::MidiMessage::noteOn (1, n, 0.9f), pos);
+                midi.addEvent (juce::MidiMessage::noteOff (1, n), pos + (int) (sr * 0.2));
+                pos += (int) (sr * 0.9);
+            }
+            const auto out = renderEngine (p, midi, pos + (int) sr, sr, blockSize, latency);
+            failures += report ("automat_mening", analyse (out), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_automat_mening.wav"), out, sr);
+
+            // Upprepa: ordet sägs om och om igen medan tangenten hålls, och tystnar när den släpps.
+            p.automat.word = 0;
+            p.automat.repeat = true;
+            p.reverb.mix = 0.0f; p.echo.mix = 0.0f;
+            juce::MidiBuffer held;
+            held.addEvent (juce::MidiMessage::noteOn (1, 48, 0.9f), 0);
+            held.addEvent (juce::MidiMessage::noteOff (1, 48), (int) (sr * 3.0));
+            const auto rep = renderEngine (p, held, (int) (sr * 5.0), sr, blockSize, latency);
+            const float late = juce::Decibels::gainToDecibels (rep.getRMSLevel (0, (int) (sr * 2.0), (int) (sr * 0.9)), -120.0f);
+            const float after = juce::Decibels::gainToDecibels (rep.getMagnitude (0, (int) (sr * 4.3), (int) (sr * 0.7)), -120.0f);
+            const bool ok = late > -40.0f && after < -60.0f;
+            std::cout << "automat_upprepa: " << late << " dB efter 2 s, " << after << " dB efter slapp  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+
+            krang::EngineParams q;
+            q.chamber = krang::Chamber::Automaten;
+            int total = 0;
+            const auto chords = buildChordMidi (sr, 70.0, total);
+            const auto wild = renderEngine (bottom (q), chords, total, sr, blockSize, latency);
+            const auto sw = analyse (wild);
+            failures += report ("automat_botten", sw, latency, sw.rmsDb < -4.0f) ? 0 : 1;
+
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto music = renderEngine (q, chords, total, sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / (total / sr * 1000.0) * 100.0;
+            std::cout << "automat_cpu: " << load << " % av en karna  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ("automat_ackord", analyse (music), latency) ? 0 : 1;
+        }
+    }
+
+    // Doktor Krangs leksaker i Automaten: sångfåglarna och uren.
+    {
+        const char* birds[] = { "kanariefagel", "naktergal", "larka", "trast" };
+        for (int b = 0; b < 4; ++b)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Automaten;
+            p.automat.figure = krang::AutomatFigure::Sangfageln;
+            p.automat.bird = (krang::BirdType) b;
+            p.reverb.mix = 0.0f; p.echo.mix = 0.0f; p.distortion.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 72, 0.9f), 0);
+            midi.addEvent (juce::MidiMessage::noteOff (1, 72), (int) (sr * 4.0));
+            const auto out = renderEngine (p, midi, (int) (sr * 6.0), sr, blockSize, latency);
+            const auto st = analyse (out);
+            // Sjunger hela tiden tangenten hålls (inga långa tystnader), och tystnar efter släpp.
+            int silentWindows = 0;
+            for (int w = 0; w < 7; ++w)
+                if (out.getRMSLevel (0, (int) (sr * (0.3 + w * 0.5)), (int) (sr * 0.5)) < 0.003f) ++silentWindows;
+            const float after = juce::Decibels::gainToDecibels (out.getMagnitude (0, (int) (sr * 5.2), (int) (sr * 0.8)), -120.0f);
+            const auto name = juce::String ("fagel_") + birds[b];
+            std::cout << name << ": " << silentWindows << " tysta halvsekunder, " << after << " dB efter slapp  ";
+            failures += report (name.toRawUTF8(), st, latency, silentWindows == 0 && after < -60.0f) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + name + ".wav"), out, sr);
+        }
+
+        const char* clocks[] = { "fickur", "pendelur", "gokur", "klockspelsur" };
+        for (int c = 0; c < 4; ++c)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Automaten;
+            p.automat.figure = krang::AutomatFigure::Urverket;
+            p.automat.clock = (krang::ClockType) c;
+            p.automat.monotone = 1.0f;   // jämn gång för mätningen (Lugn)
+            p.automat.voice = 0.0f;      // klockorna tysta medan vi räknar tick
+            p.automat.broken = 0.0f;
+            p.reverb.mix = 0.0f; p.echo.mix = 0.0f; p.distortion.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, 0.9f), 0);
+            midi.addEvent (juce::MidiMessage::noteOff (1, 60), (int) (sr * 12.0));
+            const auto out = renderEngine (p, midi, (int) (sr * 26.0), sr, blockSize, latency);
+            const auto st = analyse (out);
+            // Räkna tick mellan 1 och 9 s: högpassa bort klockorna (tickandet ligger på 2–5 kHz) och räkna
+            // toppar över en tröskel med minst 60 ms mellanrum.
+            juce::AudioBuffer<float> hp (1, out.getNumSamples());
+            {
+                float x1 = 0.0f, y1 = 0.0f, y2 = 0.0f, x2 = 0.0f;
+                const float* src = out.getReadPointer (0);
+                float* dst = hp.getWritePointer (0);
+                for (int i = 0; i < out.getNumSamples(); ++i)
+                {
+                    y1 = 0.85f * (y1 + src[i] - x1); x1 = src[i];      // två enpoliga högpass ≈ 1,2 kHz
+                    y2 = 0.85f * (y2 + y1 - x2); x2 = y1;
+                    dst[i] = y2;
+                }
+            }
+            const float* d = hp.getReadPointer (0);
+            int ticks = 0, last = -100000;
+            const float thr = hp.getMagnitude (0, (int) (sr * 1.0), (int) (sr * 8.0)) * 0.12f;
+            for (int i = (int) (sr * 1.0); i < (int) (sr * 9.0); ++i)
+                if (std::abs (d[i]) > thr && i - last > (int) (sr * 0.06)) { ++ticks; last = i; }
+            const double expected = 8.0 * 0.5 * std::pow (2.0, 0.5 * 3.0) * (c == 0 ? 2.5 : c == 1 ? 0.6 : 1.0);
+            const float after = juce::Decibels::gainToDecibels (out.getMagnitude (0, (int) (sr * 25.0), (int) (sr * 1.0)), -120.0f);
+            const bool ok = ticks >= expected * 0.8 && ticks <= expected * 1.4 + 6 && after < -60.0f;
+            const auto name = juce::String ("ur_") + clocks[c];
+            std::cout << name << ": " << ticks << " slag på 8 s (minst " << expected * 0.8 << " tick), " << after << " dB när det stannat  ";
+            failures += report (name.toRawUTF8(), st, latency, ok) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_" + name + ".wav"), out, sr);
+        }
+        // Allt i botten och CPU med tre fåglar och två ur.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Automaten;
+            p.automat.figure = krang::AutomatFigure::Sangfageln;
+            juce::MidiBuffer midi;
+            for (int n : { 72, 79, 84 }) midi.addEvent (juce::MidiMessage::noteOn (1, n, 0.9f), 0);
+            auto wild = p;
+            krang::applyKrangspaken (wild, 1.0f);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (wild, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            const auto st = analyse (out);
+            std::cout << "leksaker_cpu: tre faglar i botten, " << load << " %  " << (load < 15.0 ? "OK" : "FEL") << "\n";
+            failures += load < 15.0 ? 0 : 1;
+            failures += report ("faglar_botten", st, latency, st.rmsDb < -4.0f) ? 0 : 1;
+            p.automat.figure = krang::AutomatFigure::Urverket;
+            auto wild2 = p;
+            krang::applyKrangspaken (wild2, 1.0f);
+            const auto out2 = renderEngine (wild2, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            failures += report ("ur_botten", analyse (out2), latency) ? 0 : 1;
+        }
+    }
+
+    // Krigstuban: rätt ton, alla trattar, hela orkestern, allt i botten och CPU.
+    {
+        auto pitchNear = [&] (const juce::AudioBuffer<float>& b, double from, double len, double lo, double hi)
+        {
+            const float* d = b.getReadPointer (0);
+            const int s0 = (int) (from * sr), n = (int) (len * sr);
+            double best = 0.0, bestHz = 0.0;
+            for (double f = lo; f <= hi; f += lo * 0.0003)
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; i += 4)
+                {
+                    const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+                    re += d[s0 + i] * w * std::cos (juce::MathConstants<double>::twoPi * f * i / sr);
+                    im += d[s0 + i] * w * std::sin (juce::MathConstants<double>::twoPi * f * i / sr);
+                }
+                if (re * re + im * im > best) { best = re * re + im * im; bestHz = f; }
+            }
+            return bestHz;
+        };
+        for (int note : { 33, 45, 57 })
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Krigstuban;
+            p.tuba.ensemble = 0.0f; p.tuba.rumble = 0.0f; p.tuba.growl = 0.0f; p.tuba.swell = 0.0f;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, note, 0.8f), 0);
+            const auto out = renderEngine (p, midi, (int) (sr * 1.5), sr, blockSize, latency);
+            const double want = 440.0 * std::pow (2.0, (note - 69) / 12.0);
+            const double hz = pitchNear (out, 0.6, 0.8, want * 0.92, want * 1.08);
+            const double cents = 1200.0 * std::log2 (hz / want);
+            const float lvl = juce::Decibels::gainToDecibels (out.getRMSLevel (0, (int) (sr * 0.6), (int) (sr * 0.8)), -120.0f);
+            const bool ok = std::abs (cents) < 15.0 && lvl > -30.0f;
+            std::cout << "tuba_ton_" << note << ": " << hz << " Hz (" << cents << " cent), " << lvl << " dB  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+        const char* bells[] = { "massing", "ljudtratt", "megafon" };
+        for (int b = 0; b < 3; ++b)
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Krigstuban;
+            p.tuba.bell = (krang::TubaBell) b;
+            int total = 0;
+            const auto chords = buildChordMidi (sr, 60.0, total);
+            juce::MidiBuffer low;
+            for (const auto meta : chords)
+            {
+                auto m = meta.getMessage();
+                if (m.isNoteOnOrOff()) m.setNoteNumber (m.getNoteNumber() - 12);
+                low.addEvent (m, meta.samplePosition);
+            }
+            const auto music = renderEngine (p, low, total, sr, blockSize, latency);
+            failures += report ((juce::String ("tuba_") + bells[b]).toRawUTF8(), analyse (music), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile (juce::String ("krangbox_tuba_") + bells[b] + ".wav"), music, sr);
+            auto wild = p;
+            wild.tuba.ensemble = 1.0f; wild.tuba.flutter = 1.0f;
+            krang::applyKrangspaken (wild, 1.0f);
+            const auto w = renderEngine (wild, low, total, sr, blockSize, latency);
+            const auto sw = analyse (w);
+            failures += report ((juce::String ("tuba_botten_") + bells[b]).toRawUTF8(), sw, latency, sw.rmsDb < -4.0f) ? 0 : 1;
+        }
+        {
+            // Släppet: tonen faller och tystnar.
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Krigstuban;
+            p.tuba.ensemble = 0.0f; p.tuba.rumble = 0.0f; p.tuba.fall = 1.0f; p.tuba.releaseSec = 0.6f;
+            p.reverb.mix = 0.0f; p.echo.mix = 0.0f; p.distortion.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 45, 0.9f), 0);
+            midi.addEvent (juce::MidiMessage::noteOff (1, 45), (int) (sr * 1.0));
+            const auto out = renderEngine (p, midi, (int) (sr * 3.0), sr, blockSize, latency);
+            const float after = juce::Decibels::gainToDecibels (out.getMagnitude (0, (int) (sr * 2.5), (int) (sr * 0.5)), -120.0f);
+            std::cout << "tuba_slapp: " << after << " dB efter 1,5 s  " << (after < -60.0f ? "OK" : "FEL") << "\n";
+            failures += after < -60.0f ? 0 : 1;
+        }
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Krigstuban;
+            p.tuba.ensemble = 1.0f;
+            juce::MidiBuffer midi;
+            for (int n : { 26, 33, 38, 45, 50, 57 }) midi.addEvent (juce::MidiMessage::noteOn (1, n, 0.9f), 0);
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            const auto out = renderEngine (p, midi, (int) (sr * 10.0), sr, blockSize, latency);
+            const double load = (juce::Time::getMillisecondCounterHiRes() - start) / 10000.0 * 100.0;
+            std::cout << "tuba_cpu: 6 toner x 8 blasare, " << load << " %  " << (load < 25.0 ? "OK" : "FEL") << "\n";
+            failures += load < 25.0 ? 0 : 1;
+            failures += report ("tuba_48_blasare", analyse (out), latency) ? 0 : 1;
+        }
+    }
+
+    // Megafonen och Gramofonen.
+    {
+        auto bandDb = [&] (const juce::AudioBuffer<float>& b, double lo, double hi)
+        {
+            // Energi i ett band med en enkel DFT över 0,5 s (steg om 25 Hz).
+            const float* d = b.getReadPointer (0);
+            const int s0 = (int) (0.5 * sr), n = (int) (0.5 * sr);
+            double e = 0.0;
+            for (double f = lo; f <= hi; f += 25.0)
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; i += 3)
+                {
+                    re += d[s0 + i] * std::cos (juce::MathConstants<double>::twoPi * f * i / sr);
+                    im += d[s0 + i] * std::sin (juce::MathConstants<double>::twoPi * f * i / sr);
+                }
+                e += re * re + im * im;
+            }
+            return 10.0 * std::log10 (e + 1e-20);
+        };
+        // Megafonen tar bort bas och diskant jämfört med torrt.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Spolslingan;
+            p.reverb.mix = 0.0f; p.echo.mix = 0.0f; p.distortion.mix = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 40, 0.9f), 0);
+            const auto dry = renderEngine (p, midi, (int) (sr * 1.2), sr, blockSize, latency);
+            p.megafon = { 1.0f, 0.5f, 0.3f, 0.0f };
+            const auto wet = renderEngine (p, midi, (int) (sr * 1.2), sr, blockSize, latency);
+            const double lowDry = bandDb (dry, 75.0, 175.0), lowWet = bandDb (wet, 75.0, 175.0);
+            const bool ok = lowWet < lowDry - 10.0;
+            std::cout << "megafon_band: bas " << lowDry << " -> " << lowWet << " dB  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+            failures += report ("megafon", analyse (wet), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_megafon.wav"), wet, sr);
+            p.megafon = { 1.0f, 1.0f, 1.0f, 1.0f };
+            krang::applyKrangspaken (p, 1.0f);
+            const auto wild = renderEngine (p, midi, (int) (sr * 1.2), sr, blockSize, latency);
+            const auto sw = analyse (wild);
+            failures += report ("megafon_botten", sw, latency, sw.rmsDb < -4.0f) ? 0 : 1;
+
+            // Spelar: brummet hörs hela tiden med Alltid, och inte alls i tystnad med Vid ljud.
+            p = {};
+            p.chamber = krang::Chamber::Spolslingan;
+            p.reverb.mix = 0.0f; p.echo.mix = 0.0f;
+            p.megafon = { 1.0f, 0.5f, 0.3f, 1.0f, false };
+            const auto always = analyse (renderEngine (p, {}, (int) (sr * 1.5), sr, blockSize, latency));
+            p.megafon.gated = true;
+            const auto gated = analyse (renderEngine (p, {}, (int) (sr * 1.5), sr, blockSize, latency));
+            const bool okGate = always.rmsDb > -60.0f && gated.peakDb <= -99.0f;
+            std::cout << "megafon_vid_ljud: brum i tystnad " << always.rmsDb << " dB (Alltid), topp " << gated.peakDb
+                      << " dB (Vid ljud)  " << (okGate ? "OK" : "FEL") << "\n";
+            failures += okGate ? 0 : 1;
+        }
+        // Körens trasiga högtalare: sprak i tystnad bara med Alltid.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Koren;
+            p.reverb.mix = 0.0f; p.echo.mix = 0.0f;
+            p.koren.speaker = 1.0f;
+            p.koren.speakerGated = false;
+            const auto always = analyse (renderEngine (p, {}, (int) (sr * 3.0), sr, blockSize, latency));
+            p.koren.speakerGated = true;
+            const auto gated = analyse (renderEngine (p, {}, (int) (sr * 3.0), sr, blockSize, latency));
+            const bool ok = always.peakDb > -50.0f && gated.peakDb <= -99.0f;
+            std::cout << "koren_hogtalare_vid_ljud: sprak i tystnad topp " << always.peakDb << " dB (Alltid), "
+                      << gated.peakDb << " dB (Vid ljud)  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+        // Gramofonen: en ramp in ska komma ut fördröjd; med Hack hoppar den tillbaka ett varv i taget.
+        {
+            krang::Gramofonen g;
+            g.prepare (sr, blockSize);
+            g.setParams ({ 0.0f, 0.0f, 0.0f, 0.0f, 1.0f });
+            const int total = (int) (sr * 30.0);
+            std::vector<float> data ((size_t) total);
+            for (int i = 0; i < total; ++i) data[(size_t) i] = (float) i / (float) sr;   // värdet = tiden i sekunder
+            for (int pos = 0; pos < total; pos += blockSize) g.process (data.data() + pos, juce::jmin (blockSize, total - pos));
+            int jumps = 0, forward = 0;
+            const float rotation = 60.0f / 78.0f;   // sekunder
+            for (int i = (int) (sr * 0.1); i < total; ++i)
+            {
+                const float diff = data[(size_t) i] - data[(size_t) i - 1];   // sekunder (nålens smäll ger högst några tiondelar)
+                if (std::abs (diff + rotation) < 0.3f) ++jumps;        // tillbaka ett varv
+                if (diff > rotation * 0.6f) ++forward;                 // fram till nuet igen
+            }
+            const bool ok = jumps >= 2 && forward >= 1;
+            std::cout << "gramofon_hack: " << jumps << " hopp bakåt ett varv, " << forward << " fram igen på 30 s  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+        // Spelar: Vid ljud. En ton i en sekund och sedan tystnad: knastret ska höras med tonen och vara
+        // borta två sekunder efter att tonen tystnat.
+        {
+            auto run = [sr] (float crackle)
+            {
+                krang::Gramofonen g;
+                g.prepare (sr, 512);
+                g.setParams ({ crackle, crackle, 0.0f, 0.0f, 0.0f, true });
+                std::vector<float> x ((size_t) (sr * 4.0), 0.0f);
+                for (int i = 0; i < (int) sr; ++i) x[(size_t) i] = 0.1f * std::sin (6.2831853f * 220.0f * (float) i / (float) sr);
+                for (size_t i = 0; i < x.size(); i += 512) g.process (x.data() + i, (int) juce::jmin ((size_t) 512, x.size() - i));
+                return x;
+            };
+            const auto withNoise = run (0.6f), clean = run (0.0f);
+            double diff = 0.0; float tailPeak = 0.0f;
+            for (int i = 0; i < (int) sr; ++i) diff += juce::square (withNoise[(size_t) i] - clean[(size_t) i]);
+            for (size_t i = (size_t) (sr * 3.0); i < withNoise.size(); ++i) tailPeak = juce::jmax (tailPeak, std::abs (withNoise[i]));
+            const float diffDb = juce::Decibels::gainToDecibels ((float) std::sqrt (diff / sr), -200.0f);
+            const float tailDb = juce::Decibels::gainToDecibels (tailPeak, -200.0f);
+            const bool ok = diffDb > -50.0f && tailDb < -100.0f;
+            std::cout << "gramofon_vid_ljud: brus med tonen " << diffDb << " dB RMS, efter tonen topp " << tailDb << " dB  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+        }
+        // Knaster i tystnad, och hela skivan i botten.
+        {
+            krang::EngineParams p;
+            p.chamber = krang::Chamber::Speldosan;
+            p.reverb.mix = 0.0f; p.echo.mix = 0.0f;
+            p.gramofon = { 0.6f, 0.4f, 0.0f, 0.0f, 0.0f, false };      // Spelar: Alltid
+            const auto quiet = renderEngine (p, {}, (int) (sr * 3.0), sr, blockSize, latency);
+            const auto sq = analyse (quiet);
+            const bool ok = sq.peakDb > -40.0f && sq.rmsDb < -25.0f;
+            std::cout << "gramofon_knaster_i_tystnad: topp " << sq.peakDb << ", RMS " << sq.rmsDb << " dB  " << (ok ? "OK" : "FEL") << "\n";
+            failures += ok ? 0 : 1;
+            p.gramofon.gated = true;                                     // Spelar: Vid ljud – tyst skiva utan ljud
+            const auto gatedQuiet = analyse (renderEngine (p, {}, (int) (sr * 3.0), sr, blockSize, latency));
+            const bool okGated = gatedQuiet.peakDb <= -99.0f;
+            std::cout << "gramofon_vid_ljud_tystnad: topp " << gatedQuiet.peakDb << " dB  " << (okGated ? "OK" : "FEL") << "\n";
+            failures += okGated ? 0 : 1;
+            p.gramofon = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+            int total = 0;
+            const auto midiMelody = buildMidi (sr, 120.0, 2, total);
+            juce::MidiBuffer high;
+            for (const auto meta : midiMelody)
+            {
+                auto m = meta.getMessage();
+                if (m.isNoteOnOrOff()) m.setNoteNumber (m.getNoteNumber() + 36);
+                high.addEvent (m, meta.samplePosition);
+            }
+            const auto music = renderEngine (p, high, total + (int) sr, sr, blockSize, latency);
+            failures += report ("gramofon_skivan", analyse (music), latency) ? 0 : 1;
+            writeWav (outDir.getChildFile ("krangbox_gramofon.wav"), music, sr);
+            krang::applyKrangspaken (p, 1.0f);
+            const auto wild = renderEngine (p, high, total + (int) sr, sr, blockSize, latency);
+            const auto sw = analyse (wild);
+            failures += report ("gramofon_botten", sw, latency, sw.rmsDb < -4.0f) ? 0 : 1;
+        }
+    }
+
+    // Stämningen: tabellen, och att kamrarna faktiskt spelar i den.
+    {
+        krang::Stamning st;
+        st.setParams ({ krang::TuningSystem::Ren, 0, 0.0f });
+        const double e = st.offset (64) * 100.0, g = st.offset (67) * 100.0, c = st.offset (60) * 100.0;
+        st.setParams ({ krang::TuningSystem::Liksvavande, 0, 1.0f });
+        const double blueThird = st.offset (63) * 100.0, blueSeventh = st.offset (71) * 100.0;
+        st.setParams ({ krang::TuningSystem::Naturtoner, 2, 0.0f });
+        const double natSeventh = st.offset (2 + 10) * 100.0;      // C över D: naturseptiman 7/4
+        st.setParams ({ krang::TuningSystem::Medeltonig, 0, 0.0f });
+        const double mtThird = st.offset (64) * 100.0;
+        const bool ok = std::abs (e + 13.686) < 0.01 && std::abs (g - 1.955) < 0.01 && std::abs (c) < 1e-9
+                     && std::abs (blueThird - 50.0) < 1e-6 && std::abs (blueSeventh + 50.0) < 1e-6
+                     && std::abs (natSeventh + 31.174) < 0.01 && std::abs (mtThird + 13.686) < 0.01;
+        std::cout << "stamning_tabell: ren ters " << e << " ct, ren kvint " << g << " ct, blå ters " << blueThird
+                  << " ct, naturseptima " << natSeventh << " ct, medeltonig ters " << mtThird << " ct  " << (ok ? "OK" : "FEL") << "\n";
+        failures += ok ? 0 : 1;
+
+        auto pitchNear = [&] (const juce::AudioBuffer<float>& b, double from, double len, double expect)
+        {
+            const float* d = b.getReadPointer (0);
+            const int s0 = (int) (from * sr), n = (int) (len * sr);
+            double best = 0.0, bestHz = 0.0;
+            for (double f = expect * 0.94; f <= expect * 1.06; f += expect * 0.0001)
+            {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < n; i += 2)
+                {
+                    const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+                    const double ph = juce::MathConstants<double>::twoPi * f * i / sr;
+                    re += d[s0 + i] * w * std::cos (ph);
+                    im += d[s0 + i] * w * std::sin (ph);
+                }
+                if (re * re + im * im > best) { best = re * re + im * im; bestHz = f; }
+            }
+            return bestHz;
+        };
+        // Samma ton i liksvävande och i den valda stämningen: skillnaden i cent ska vara stämningens.
+        auto shift = [&] (krang::Chamber ch, int note, krang::StamningParams tuning)
+        {
+            krang::EngineParams p;
+            p.chamber = ch;
+            p.distortion.mix = 0.0f; p.reverb.mix = 0.0f; p.echo.mix = 0.0f;
+            p.bordunorgeln.drone = 0.0f;
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, note, 0.8f), 0);
+            const auto plain = renderEngine (p, midi, (int) (sr * 1.2), sr, blockSize, latency);
+            p.stamning = tuning;
+            const auto tuned = renderEngine (p, midi, (int) (sr * 1.2), sr, blockSize, latency);
+            const double expect = 440.0 * std::pow (2.0, (note - 69) / 12.0);
+            return 1200.0 * std::log2 (pitchNear (tuned, 0.3, 0.8, expect) / pitchNear (plain, 0.3, 0.8, expect));
+        };
+        struct Case { const char* name; krang::Chamber ch; int note; krang::StamningParams t; double expect; };
+        const Case cases[] = {
+            { "stalpiano_ren_ters", krang::Chamber::Stalpiano, 64, { krang::TuningSystem::Ren, 0, 0.0f }, -13.686 },
+            { "spolslingan_bla_ters", krang::Chamber::Spolslingan, 63, { krang::TuningSystem::Liksvavande, 0, 1.0f }, 50.0 },
+            { "bordunorgeln_ren_ters_pa_D", krang::Chamber::Bordunorgeln, 66, { krang::TuningSystem::Ren, 2, 0.0f }, -13.686 },
+            { "lutverket_naturseptima", krang::Chamber::Lutverket, 60, { krang::TuningSystem::Naturtoner, 2, 0.0f }, -31.174 },
+            { "krigstuban_pytagoreisk_ters", krang::Chamber::Krigstuban, 52, { krang::TuningSystem::Pytagoreisk, 0, 0.0f }, 7.82 } };
+        for (const auto& k : cases)
+        {
+            const double got = shift (k.ch, k.note, k.t);
+            const bool okc = std::abs (got - k.expect) < 3.0;
+            std::cout << k.name << ": " << got << " ct (väntat " << k.expect << ")  " << (okc ? "OK" : "FEL") << "\n";
+            failures += okc ? 0 : 1;
         }
     }
 

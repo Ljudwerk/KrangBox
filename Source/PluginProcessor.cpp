@@ -105,6 +105,7 @@ void KrangBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     scope.push (buffer.getReadPointer (0), total);
     kaosEvents.store (engine.getKaosEventCount(), std::memory_order_relaxed);
+    automatWord.store (engine.getAutomatWord(), std::memory_order_relaxed);
     for (int i = 0; i < (int) modSources.size(); ++i)
         modSources[(size_t) i].store (engine.getModulation().sourceValue ((krang::ModSource) (i + 1)), std::memory_order_relaxed);
 

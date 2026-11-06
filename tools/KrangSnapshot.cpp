@@ -1,8 +1,11 @@
 // KrangSnapshot – ritar Krang-stilprovet till PNG utan att starta en DAW.
 //
 //   KrangSnapshot <fil.png> [skala] [steg-fil.png] [--tid]
-//   KrangSnapshot --kaos <fil.png>   (Kaosraden med en hackad våg i Kaosskopet)
+//   KrangSnapshot --kaos <fil.png>   (Kaosavdelningen med en hackad våg i Krangskopet)
 //   KrangSnapshot --modulation <fil.png>   (Modulationsraden med tre kopplingar och tända lampor)
+//   KrangSnapshot --kammare <orgel|speldosa|automat|fagel|ur|tuba> <fil.png> [tratt 0–2]   (de tre nyaste kamrarna; fagel och ur = Automatens leksaker)
+//   KrangSnapshot --spolslingan <fil.png> [pd]   (Spolslingan med FM-spolen eller Fasvridaren)
+//   KrangSnapshot --hammarverket <fil.png> [läge 0–4]   (Hammarverket med kit, chans, ratchets och lås)
 //   KrangSnapshot --tonsteg <fil.png> [skala] [sida]   (Tonstegverket med startmelodin; med sida: STEG 16 och den sidan öppen)
 //
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
@@ -12,6 +15,8 @@
 #include "ui/Panels.h"
 #include "ui/ModulationPanel.h"
 #include "ui/TonStegverketPanel.h"
+#include "ui/ValueFormat.h"
+#include "ui/Jugend.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <iostream>
 
@@ -44,10 +49,18 @@ struct Attach
 {
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliders;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> combos;
-    void slider (juce::AudioProcessorValueTreeState& st, const juce::String& pid, juce::Slider& s) { sliders.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (st, pid, s)); }
+    void slider (juce::AudioProcessorValueTreeState& st, const juce::String& pid, juce::Slider& s)
+    {
+        sliders.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (st, pid, s));
+        if (auto* param = st.getParameter (pid))
+        {
+            s.textFromValueFunction = [param] (double v) { return krang::ui::formatValue (*param, (float) v); };
+            s.updateText();
+        }
+    }
     void combo (juce::AudioProcessorValueTreeState& st, const juce::String& pid, juce::ComboBox& c)
     {
-        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (st.getParameter (pid))) c.addItemList (choice->choices, 1);
+        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (st.getParameter (pid))) { c.clear (juce::dontSendNotification); c.addItemList (choice->choices, 1); }
         combos.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (st, pid, c));
     }
 };
@@ -92,6 +105,130 @@ int main (int argc, char* argv[])
         juce::FileOutputStream st (f);
         juce::PNGImageFormat png;
         return st.openedOk() && png.writeImageToStream (sheet, st) ? 0 : 2;
+    }
+
+    // KrangSnapshot --kammare <orgel|speldosa|automat> <fil.png>: en av de tre nyaste kamrarnas paneler.
+    // KrangSnapshot --jugend <fil.png>: alla jugendillustrationer i alla lägen, i panelernas storlekar.
+    if (juce::String (argv[1]) == "--jugend" && argc > 2)
+    {
+        namespace J = krang::ui::jugend;
+        juce::Image img (juce::Image::RGB, 1420, 1330, true);
+        juce::Graphics g (img);
+        g.fillAll (juce::Colour (0xff1d1c1b));
+        auto cell = [] (int row, int col, float w, float h) { return juce::Rectangle<float> (10.0f + col * 282.0f, 10.0f + row * 264.0f, w, h); };
+        for (int t = 0; t < 4; ++t) J::lur (g, cell (0, t, 156, 246), t, t == 3 ? 0.6f : 0.0f);
+        for (int t = 0; t < 4; ++t) J::lutInstrument (g, cell (1, t, 180, 246), t, t == 3 ? 0.6f : 0.1f, 0.3f);
+        for (int t = 0; t < 5; ++t) J::bell (g, cell (2, t, 272, 242), t, t == 0 ? 0.5f : 0.0f);
+        for (int t = 0; t < 4; ++t) J::pump (g, cell (3, t, 206, 246), t, 0.6f, t == 2 ? 0.5f : 0.0f, 0.5f);
+        J::tuba (g, cell (4, 0, 264, 256), 0, 1, 0.3f);
+        J::tuba (g, cell (4, 1, 264, 256), 0, 3, 0.8f);
+        J::tuba (g, cell (4, 2, 264, 256), 1, 2, 0.5f);
+        J::tuba (g, cell (4, 3, 264, 256), 2, 1, 0.5f);
+        J::tuba (g, cell (4, 4, 264, 256), 2, 4, 1.0f);
+        if (argc > 3)   // de nya: Basmålen, Bordunorgeln och Spolslingan
+        {
+            g.fillAll (juce::Colour (0xff1d1c1b));
+            J::mill (g, cell (0, 0, 140, 280), 0.6f);
+            J::coil (g, cell (0, 1, 110, 272), false, 0.8f);
+            J::coil (g, cell (0, 2, 110, 272), true, 0.2f);
+            for (int t = 0; t < 5; ++t) J::bordunInstrument (g, cell (1 + t / 3, t % 3, 170, 256), t, 0.6f);
+            J::musicBox (g, juce::Rectangle<float> (300, 10, 450, 256), 0, 0.1f, 0.2f);
+            J::musicBox (g, juce::Rectangle<float> (300, 280, 450, 256), 1, 0.7f, 0.8f);
+            J::musicBox (g, juce::Rectangle<float> (860, 10, 450, 256), 2, 0.0f, 0.5f);
+        }
+        juce::File f = juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]);
+        f.deleteFile();
+        juce::FileOutputStream st (f);
+        juce::PNGImageFormat png;
+        return st.openedOk() && png.writeImageToStream (img, st) ? 0 : 2;
+    }
+
+    if (juce::String (argv[1]) == "--kammare" && argc > 3)
+    {
+        SnapshotHost host;
+        krang::ui::KrangLookAndFeel lf;
+        const juce::String which (argv[2]);
+        std::unique_ptr<juce::Component> panel;
+        krang::ui::Bindings b;
+        if (which == "orgel")         { auto* p = new krang::ui::AngorgelnPanel(); b = p->bindings(); panel.reset (p); }
+        else if (which == "speldosa") { auto* p = new krang::ui::SpeldosanPanel(); b = p->bindings(); panel.reset (p); }
+        else if (which == "tuba")     { auto* p = new krang::ui::KrigstubanPanel(); b = p->bindings(); panel.reset (p); }
+        else if (which == "kor")      { auto* p = new krang::ui::KorenPanel(); b = p->bindings(); panel.reset (p); }
+        else                          { auto* p = new krang::ui::AutomatenPanel(); b = p->bindings(); panel.reset (p); }
+        const float fig = which == "fagel" ? 1.0f : which == "ur" ? 2.0f : 0.0f;
+        for (auto [pid, value] : { std::pair<const char*, float> { "agLeak", 0.5f }, { "sdRust", 0.4f }, { "sdSpring", 0.7f }, { "atBroken", 0.5f },
+                                   { "atFigure", fig }, { "atBird", 1.0f }, { "atClock", 2.0f },
+                                   { "ktEnsemble", 0.8f }, { "koSpeaker", 0.6f }, { "ktPressure", 0.8f }, { "ktBell", (float) (argc > 4 ? juce::String (argv[4]).getIntValue() : 0) } })
+            if (auto* p = host.state.getParameter (pid)) p->setValueNotifyingHost (p->convertTo0to1 (value));
+        panel->setLookAndFeel (&lf);
+        panel->setSize (1200, 320);
+        Attach a;
+        for (auto& [slider, pid] : b.sliders) a.slider (host.state, pid, *slider);
+        for (auto& [combo, pid] : b.combos) a.combo (host.state, pid, *combo);
+        if (auto* ap = dynamic_cast<krang::ui::AutomatenPanel*> (panel.get()))
+            ap->setSpokenWord (fig > 0.0f ? 100 + (int) fig : 11);
+        const auto img = panel->createComponentSnapshot (panel->getLocalBounds(), true, 1.0f);
+        a = {};
+        panel->setLookAndFeel (nullptr);
+        juce::File f = juce::File::getCurrentWorkingDirectory().getChildFile (argv[3]);
+        f.deleteFile();
+        juce::FileOutputStream st (f);
+        juce::PNGImageFormat png;
+        return st.openedOk() && png.writeImageToStream (img, st) ? 0 : 2;
+    }
+
+    if (juce::String (argv[1]) == "--spolslingan" && argc > 2)
+    {
+        SnapshotHost host;
+        const bool pd = argc > 3 && juce::String (argv[3]) == "pd";
+        for (auto [pid, value] : { std::pair<const char*, float> { "chamber", 3.0f }, { "spEngine", pd ? 1.0f : 0.0f },
+                                   { "spPdWave", 4.0f }, { "spArp", 8.0f }, { "spArpLatch", 1.0f }, { "spPdDetune", 12.0f } })
+            if (auto* p = host.state.getParameter (pid)) p->setValueNotifyingHost (p->convertTo0to1 (value));
+        krang::ui::KrangLookAndFeel lf;
+        krang::ui::SpolslinganPanel panel;
+        panel.setLookAndFeel (&lf);
+        panel.setSize (1200, 320);
+        Attach a;
+        const auto b = panel.bindings();
+        for (auto& [slider, pid] : b.sliders) a.slider (host.state, pid, *slider);
+        for (auto& [combo, pid] : b.combos) a.combo (host.state, pid, *combo);
+        const auto img = panel.createComponentSnapshot (panel.getLocalBounds(), true, 1.0f);
+        a = {};
+        panel.setLookAndFeel (nullptr);
+        juce::File f = juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]);
+        f.deleteFile();
+        juce::FileOutputStream st (f);
+        juce::PNGImageFormat png;
+        return st.openedOk() && png.writeImageToStream (img, st) ? 0 : 2;
+    }
+
+    if (juce::String (argv[1]) == "--hammarverket" && argc > 2)
+    {
+        SnapshotHost host;
+        krang::StepPattern pattern;
+        pattern.fromString ("2000002000200000/0000000000000100/00002{r1}000000020{c2}00/0000000000002000/0001{t-5}0001{t+7}0000001{d6}/1010101{r3}1{c1}01{c2}01{c3}00/0000000000000010/0000010001010000");
+        std::atomic<int> playing { 5 };
+        const int mode = argc > 3 ? juce::String (argv[3]).getIntValue() : 0;
+        for (auto [pid, value] : { std::pair<const char*, float> { "hv1Sound", 8.0f }, { "hv3Sound", 10.0f }, { "hv4Sound", 9.0f } })
+            if (auto* p = host.state.getParameter (pid)) p->setValueNotifyingHost (p->convertTo0to1 (value));
+        krang::ui::KrangLookAndFeel lf;
+        krang::ui::HammarverketPanel panel (pattern, playing);
+        panel.setLookAndFeel (&lf);
+        panel.setSize (1200, 320);
+        Attach a;
+        const auto b = panel.bindings();
+        for (auto& [slider, pid] : b.sliders) a.slider (host.state, pid, *slider);
+        for (auto& [combo, pid] : b.combos) a.combo (host.state, pid, *combo);
+        a.combo (host.state, "seqLength", panel.steg.length);
+        panel.steg.setMode (mode);
+        const auto img = panel.createComponentSnapshot (panel.getLocalBounds(), true, 1.0f);
+        a = {};
+        panel.setLookAndFeel (nullptr);
+        juce::File f = juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]);
+        f.deleteFile();
+        juce::FileOutputStream st (f);
+        juce::PNGImageFormat png;
+        return st.openedOk() && png.writeImageToStream (img, st) ? 0 : 2;
     }
 
     if (juce::String (argv[1]) == "--tonsteg" && argc > 2)
@@ -174,7 +311,7 @@ int main (int argc, char* argv[])
         krang::ui::KrangLookAndFeel lf;
         krang::ui::KaosPanel kaos;
         kaos.setLookAndFeel (&lf);
-        kaos.setSize (1200, 130);
+        kaos.setSize (1200, 320);
         // En sågtand på 110 Hz där en bit hackas och en bit söndras, som Kaosmotorn gör.
         std::vector<float> wave (4096);
         for (size_t i = 0; i < wave.size(); ++i)
@@ -282,8 +419,8 @@ int main (int argc, char* argv[])
         }
         std::cout << "Hel omritning: " << (juce::Time::getMillisecondCounterHiRes() - start) / runs << " ms\n";
 
-        // Kaosskopet ritas om 30 gånger i sekunden; det måste vara billigt.
-        krang::ui::Kaosskop scope;
+        // Krangskopet ritas om 30 gånger i sekunden; det måste vara billigt.
+        krang::ui::Krangskop scope;
         scope.setSize (640, 90);
         std::vector<float> wave (4096);
         for (size_t i = 0; i < wave.size(); ++i) wave[i] = (float) std::sin ((double) i * 0.03);
@@ -294,7 +431,7 @@ int main (int argc, char* argv[])
             juce::Graphics g (canvas);
             scope.paintEntireComponent (g, true);
         }
-        std::cout << "Kaosskopet: " << (juce::Time::getMillisecondCounterHiRes() - s0) / runs << " ms per bild\n";
+        std::cout << "Krangskopet: " << (juce::Time::getMillisecondCounterHiRes() - s0) / runs << " ms per bild\n";
         bas.setLookAndFeel (nullptr); ang.setLookAndFeel (nullptr); panel.setLookAndFeel (nullptr);
     }
     return 0;

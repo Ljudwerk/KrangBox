@@ -28,7 +28,19 @@ struct FactoryPreset
 namespace mode
 {
     constexpr float basmalen = 0, hammarverket = 1, bordunorgeln = 2, spolslingan = 3;
-    constexpr float arpUpp = 1, arpNed = 2, arpUppNed = 3, arpSlump = 4;
+    constexpr float arpUpp = 1, arpNed = 2, arpUppNed = 3, arpSlump = 4, arpSomSpelat = 5, arpAckord = 6, arpTvars = 7, arpTrappa = 8;
+    constexpr float fasvridaren = 1;
+    constexpr float angorgeln = 11, speldosan = 12, automaten = 13, krigstuban = 14;
+    constexpr float massingTratt = 0, ljudtratt = 1, megafon = 2;
+    constexpr float liksvavande = 0, renStamning = 1, pytagoreisk = 2, medeltonig = 3, naturtoner = 4, grundBordunen = 12;
+    constexpr float kyrkorgel = 0, kalliope = 1, harmonium = 2, positiv = 3;
+    constexpr float vanligDosa = 0, kyrkspeldosa = 1, glasdosa = 2;
+    constexpr float ordKrang = 0, ordMaskin = 1, ordHjalp = 2, ordAnga = 3, ordVarning = 4, ordRost = 5, ordNollEtt = 6,
+                    ordFolket = 7, ordJa = 8, ordNej = 9, ordManniska = 10, ordDoktorKrang = 11, ordTangenterna = 12;
+    constexpr float sangfageln = 1, urverket = 2;
+    constexpr float kanarie = 0, naktergal = 1, larka = 2, trast = 3;
+    constexpr float fickur = 0, pendelur = 1, gokur = 2, klockspelsur = 3;
+    constexpr float pdSag = 0, pdFyrkant = 1, pdPuls = 2, pdDubbelsinus = 3, pdResSag = 4, pdResTriangel = 5, pdResTrapets = 6;
     constexpr float takt8 = 0, takt16 = 1, takt16T = 2, takt32 = 3;
     constexpr float tonC = 0, tonD = 2, tonE = 4, tonG = 7, tonA = 9;
     constexpr float ror = 0, fuzz = 1, vikning = 2, bitkross = 3;
@@ -204,6 +216,37 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "spGrain", 0.25f }, { "distMode", bitkross }, { "distBits", 7.0f }, { "distMix", 0.4f },
             { "kaAmount", 0.45f }, { "kaSync", kaos8 }, { "kaDrift", 0.6f }, { "kaStutter", 0.4f }, { "kaReverse", 0.6f },
             { "kaCrush", 0.3f }, { "tpAge", 0.5f }, { "rvbMode", rostigTank }, { "rvbMix", 0.25f } }, {} },
+
+        // ------------------------------------------------------------------ Fasvridaren
+        // Spolslingan med fasdistorsion i CZ-stil, och Slingans nya lägen.
+        { "Init Fasvridaren", "Fasvridaren",
+          { { "chamber", spolslingan }, { "master", 2.0f }, { "spEngine", fasvridaren }, { "spPdAmount", 0.7f }, { "spDecay", 0.5f },
+            { "distMix", 0.2f }, { "rvbMix", 0.2f } }, {} },
+
+        { "Resonant spole", "Fasvridaren",
+          { { "chamber", spolslingan }, { "master", 4.0f }, { "spEngine", fasvridaren }, { "spPdWave", pdResSag }, { "spPdAmount", 0.9f }, { "spDecay", 0.25f },
+            { "spRelease", 0.25f }, { "distMix", 0.3f }, { "distDrive", 12.0f }, { "ecSync", eko8p }, { "ecFeedback", 0.35f }, { "ecMix", 0.2f },
+            { "rvbMix", 0.2f } }, {} },
+
+        { "Svävande stråkar", "Fasvridaren",
+          { { "chamber", spolslingan }, { "master", 6.0f }, { "spEngine", fasvridaren }, { "spPdWave", pdSag }, { "spPdAmount", 0.45f }, { "spDecay", 2.0f },
+            { "spPdDetune", 14.0f }, { "spAttack", 0.6f }, { "spRelease", 1.8f }, { "distMix", 0.0f }, { "tpWow", 0.25f },
+            { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbSize", 0.85f } }, {} },
+
+        { "Trappan i tornet", "Fasvridaren",
+          { { "chamber", spolslingan }, { "spEngine", fasvridaren }, { "spPdWave", pdResTrapets }, { "spPdAmount", 0.6f }, { "spDecay", 0.15f },
+            { "spArp", arpTrappa }, { "spArpRate", takt16 }, { "spArpOct", 2.0f }, { "spArpGate", 0.4f }, { "spRelease", 0.15f },
+            { "ecSync", eko8 }, { "ecFeedback", 0.3f }, { "ecMix", 0.2f }, { "rvbMix", 0.25f } }, {} },
+
+        { "Ackordpumpen", "Fasvridaren",
+          { { "chamber", spolslingan }, { "spEngine", fasvridaren }, { "spPdWave", pdFyrkant }, { "spPdAmount", 0.8f }, { "spDecay", 0.12f },
+            { "spPdDetune", 8.0f }, { "spArp", arpAckord }, { "spArpRate", takt8 }, { "spArpGate", 0.3f }, { "spArpLatch", 1.0f },
+            { "spRelease", 0.1f }, { "distDrive", 14.0f }, { "distMix", 0.4f }, { "rvbMode", platta }, { "rvbMix", 0.2f } }, {} },
+
+        { "Pulsande ruin", "Fasvridaren",
+          { { "chamber", spolslingan }, { "spEngine", fasvridaren }, { "spPdWave", pdPuls }, { "spPdAmount", 0.75f }, { "spDecay", 0.3f },
+            { "spArp", arpTvars }, { "spArpRate", takt16T }, { "spArpOct", 2.0f }, { "spArpGate", 0.6f }, { "spGrain", 0.25f },
+            { "kaAmount", 0.2f }, { "kaSync", kaos16 }, { "kaStutter", 0.8f }, { "rvbMix", 0.25f } }, {} },
 
         // ------------------------------------------------------------------ Stålpiano
         { "Init Stålpiano", "Stålpiano",
@@ -409,6 +452,201 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "distMode", fuzz }, { "distDrive", 10.0f }, { "distMix", 0.25f }, { "kaAmount", 0.15f }, { "kaStutter", 0.3f },
             { "kaReverse", 0.7f }, { "kaCrush", 0.0f }, { "tpWow", 0.4f }, { "rvbMode", hall }, { "rvbMix", 0.4f } }, {} },
 
+        // ------------------------------------------------------------------ Orgel
+        { "Init Ångorgeln", "Orgel", { { "chamber", angorgeln }, { "distMix", 0.0f }, { "rvbMix", 0.3f } }, {} },
+
+        { "Katedralen i ruinen", "Orgel",
+          { { "chamber", angorgeln }, { "agR16", 0.8f }, { "agR8", 1.0f }, { "agR4", 0.8f }, { "agR223", 0.4f }, { "agR2", 0.6f },
+            { "agPressure", 0.85f }, { "agChiff", 0.5f }, { "agLeak", 0.15f }, { "agRelease", 0.6f }, { "distMix", 0.0f },
+            { "rvbMode", hall }, { "rvbMix", 0.5f }, { "rvbSize", 1.0f } }, {} },
+
+        { "Karusellen", "Orgel",
+          { { "chamber", angorgeln }, { "agType", kalliope }, { "agR16", 0.0f }, { "agR8", 1.0f }, { "agR4", 0.7f }, { "agR2", 0.0f },
+            { "agPressure", 0.6f }, { "agChiff", 0.6f }, { "agLeak", 0.35f }, { "agTrem", 0.3f }, { "distMix", 0.15f },
+            { "tpWow", 0.2f }, { "rvbMode", platta }, { "rvbMix", 0.2f } }, {} },
+
+        { "Väckelsemötet", "Orgel",
+          { { "chamber", angorgeln }, { "master", 5.0f }, { "agType", harmonium }, { "agR16", 0.3f }, { "agR8", 1.0f }, { "agR4", 0.5f }, { "agR2", 0.0f },
+            { "agTrem", 0.4f }, { "agChiff", 0.2f }, { "agAttack", 0.08f }, { "agRelease", 0.3f }, { "distMix", 0.0f },
+            { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        { "Positivet i kapellet", "Orgel",
+          { { "chamber", angorgeln }, { "master", 2.0f }, { "agType", positiv }, { "agR16", 0.0f }, { "agR8", 1.0f }, { "agR4", 0.6f },
+            { "agR223", 0.5f }, { "agR2", 0.0f }, { "agChiff", 0.7f }, { "agPressure", 0.9f }, { "agLeak", 0.05f }, { "distMix", 0.0f },
+            { "rvbMode", hall }, { "rvbMix", 0.35f }, { "rvbSize", 0.7f } }, {} },
+
+        { "Sviktande bälg", "Orgel",
+          { { "chamber", angorgeln }, { "agR16", 0.6f }, { "agR8", 1.0f }, { "agR4", 0.6f }, { "agR2", 0.4f }, { "agPressure", 0.2f },
+            { "agLeak", 0.6f }, { "agTrem", 0.15f }, { "agRelease", 0.8f }, { "tpWow", 0.3f }, { "tpAge", 0.5f },
+            { "rvbMode", rostigTank }, { "rvbMix", 0.35f } }, {} },
+
+        // ------------------------------------------------------------------ Speldosor
+        { "Init Speldosan", "Speldosor", { { "chamber", speldosan }, { "distMix", 0.0f }, { "rvbMix", 0.25f } }, {} },
+
+        { "Vaggvisa i ruinen", "Speldosor",
+          { { "chamber", speldosan }, { "sdBox", 0.8f }, { "sdSpring", 0.35f }, { "sdWorks", 0.3f }, { "distMix", 0.0f },
+            { "tpWow", 0.15f }, { "tpAge", 0.3f }, { "rvbMode", hall }, { "rvbMix", 0.35f } }, {} },
+
+        { "Kyrkspeldosan", "Speldosor",
+          { { "chamber", speldosan }, { "sdType", kyrkspeldosa }, { "sdDecay", 1.6f }, { "sdBox", 0.6f }, { "sdHard", 0.4f },
+            { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbSize", 0.9f } }, {} },
+
+        { "Glasdosan", "Speldosor",
+          { { "chamber", speldosan }, { "sdType", glasdosa }, { "sdHard", 0.3f }, { "sdBox", 0.3f }, { "sdWorks", 0.1f },
+            { "distMix", 0.0f }, { "ecSync", eko8p }, { "ecFeedback", 0.35f }, { "ecDark", 0.5f }, { "ecMix", 0.2f },
+            { "rvbMode", hall }, { "rvbMix", 0.35f } }, {} },
+
+        { "Fjädern tar slut", "Speldosor",
+          { { "chamber", speldosan }, { "sdSpring", 1.0f }, { "sdRust", 0.55f }, { "sdWorks", 0.7f }, { "sdBox", 0.7f },
+            { "tpWow", 0.4f }, { "tpAge", 0.6f }, { "tpDropout", 0.2f }, { "rvbMode", rostigTank }, { "rvbMix", 0.3f } }, {} },
+
+        { "Speldosans vals", "Speldosor",
+          { { "chamber", speldosan }, { "sdBox", 0.6f }, { "sdSpring", 0.25f }, { "sdWorks", 0.35f }, { "tsRoot", 72.0f },
+            { "tsScale", 1.0f }, { "seqTempo", 84.0f }, { "tsRate", 0.0f }, { "seqLength", 1.0f }, { "distMix", 0.0f },
+            { "rvbMode", hall }, { "rvbMix", 0.3f } },
+          {}, "0 4 7 . 7 . 12 11 . 7 . 9 . 7 5 4 2 5 9 . 9 . 11 12 . 7 . 4 . 2 0 ." },
+
+        // ------------------------------------------------------------------ Automaten
+        { "Init Automaten", "Automaten", { { "chamber", automaten }, { "master", 3.0f }, { "atRepeat", 1.0f }, { "distMix", 0.2f }, { "rvbMix", 0.2f } }, {} },
+
+        { "Varningsrösten", "Automaten",
+          { { "chamber", automaten }, { "atWord", ordVarning }, { "atVoice", 0.5f }, { "atMonotone", 1.0f }, { "atRepeat", 1.0f },
+            { "atTempo", 0.6f }, { "distDrive", 14.0f }, { "distMix", 0.5f }, { "fxMode", hogpass }, { "fxCutoff", 300.0f },
+            { "rvbMode", rostigTank }, { "rvbMix", 0.3f } }, {} },
+
+        { "Doktor Krang talar", "Automaten",
+          { { "chamber", automaten }, { "atWord", ordDoktorKrang }, { "atVoice", 0.25f }, { "atMonotone", 0.2f }, { "atTempo", 0.4f },
+            { "distMix", 0.1f }, { "rvbMode", hall }, { "rvbMix", 0.35f } }, {} },
+
+        { "Den trasiga roboten", "Automaten",
+          { { "chamber", automaten }, { "atWord", ordHjalp }, { "atVoice", 0.55f }, { "atBroken", 0.85f }, { "atRepeat", 1.0f },
+            { "distMode", bitkross }, { "distBits", 6.0f }, { "distMix", 0.5f }, { "kaAmount", 0.3f }, { "kaSync", kaos16 },
+            { "kaStutter", 1.0f }, { "rvbMix", 0.2f } }, {} },
+
+        { "Viskande maskin", "Automaten",
+          { { "chamber", automaten }, { "master", 3.0f }, { "atWord", ordManniska }, { "atVoice", 1.0f }, { "atMonotone", 0.5f },
+            { "atTempo", 0.3f }, { "distMix", 0.0f }, { "ecSync", eko4 }, { "ecFeedback", 0.5f }, { "ecMix", 0.3f },
+            { "rvbMode", hall }, { "rvbMix", 0.5f } }, {} },
+
+        { "Talande tangenter", "Automaten",
+          { { "chamber", automaten }, { "master", 4.0f }, { "atWord", ordTangenterna }, { "atVoice", 0.45f }, { "atMonotone", 0.7f }, { "atTempo", 0.65f },
+            { "distMix", 0.2f }, { "rvbMode", platta }, { "rvbMix", 0.2f } }, {} },
+
+        // Doktor Krangs leksaker: mekaniska sångfåglar och urverk som tickar och sjunger.
+        { "Sångfågeln i buren", "Automaten",
+          { { "chamber", automaten }, { "master", 3.0f }, { "atFigure", sangfageln }, { "atBird", kanarie }, { "atVoice", 0.3f }, { "distMix", 0.0f },
+            { "rvbMode", platta }, { "rvbMix", 0.25f } }, {} },
+
+        { "Näktergalen i ruinen", "Automaten",
+          { { "chamber", automaten }, { "atFigure", sangfageln }, { "atBird", naktergal }, { "atVoice", 0.25f }, { "atMonotone", 0.4f },
+            { "distMix", 0.0f }, { "ecSync", eko8p }, { "ecFeedback", 0.3f }, { "ecDark", 0.6f }, { "ecMix", 0.15f },
+            { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbSize", 0.9f } }, {} },
+
+        { "Lärkan över fabriken", "Automaten",
+          { { "chamber", automaten }, { "atFigure", sangfageln }, { "atBird", larka }, { "atTempo", 0.6f }, { "atBroken", 0.2f },
+            { "distMix", 0.1f }, { "tpWow", 0.3f }, { "tpAge", 0.3f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        { "Trasig trast", "Automaten",
+          { { "chamber", automaten }, { "atFigure", sangfageln }, { "atBird", trast }, { "atBroken", 0.65f }, { "atVoice", 0.6f },
+            { "distMode", bitkross }, { "distBits", 7.0f }, { "distMix", 0.35f }, { "rvbMode", rostigTank }, { "rvbMix", 0.3f } }, {} },
+
+        { "Pendeluret i hallen", "Automaten",
+          { { "chamber", automaten }, { "master", 4.0f }, { "atFigure", urverket }, { "atClock", pendelur }, { "atVoice", 0.6f },
+            { "atMonotone", 0.9f }, { "atTempo", 0.55f }, { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.4f }, { "rvbSize", 0.9f } }, {} },
+
+        { "Gökuret", "Automaten",
+          { { "chamber", automaten }, { "master", 4.0f }, { "atFigure", urverket }, { "atClock", gokur }, { "atVoice", 0.7f },
+            { "atTempo", 0.6f }, { "distMix", 0.0f }, { "rvbMode", platta }, { "rvbMix", 0.25f } }, {} },
+
+        { "Fickuret", "Automaten",
+          { { "chamber", automaten }, { "master", 5.0f }, { "atFigure", urverket }, { "atClock", fickur }, { "atVoice", 0.5f },
+            { "atTempo", 0.5f }, { "distMix", 0.0f }, { "rvbMode", platta }, { "rvbMix", 0.2f } }, {} },
+
+        { "Klockspelsuret", "Automaten",
+          { { "chamber", automaten }, { "master", 4.0f }, { "atFigure", urverket }, { "atClock", klockspelsur }, { "atVoice", 0.75f },
+            { "atBroken", 0.15f }, { "distMix", 0.0f }, { "tpWow", 0.2f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
+        // ------------------------------------------------------------------ Krigstuban
+        { "Init Krigstuban", "Krigstuban", { { "chamber", krigstuban }, { "master", 3.0f }, { "distMix", 0.0f }, { "rvbMix", 0.25f } }, {} },
+
+        { "Domedagens BRAAM", "Krigstuban",
+          { { "chamber", krigstuban }, { "ktEnsemble", 1.0f }, { "ktPressure", 0.95f }, { "ktGrowl", 0.3f }, { "ktSwell", 0.35f },
+            { "ktFall", 0.4f }, { "ktRumble", 0.8f }, { "ktRelease", 2.0f }, { "distDrive", 10.0f }, { "distMix", 0.3f },
+            { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbSize", 1.0f } }, {} },
+
+        { "Ljudtrattarna", "Krigstuban",
+          { { "chamber", krigstuban }, { "ktBell", ljudtratt }, { "ktEnsemble", 0.6f }, { "ktPressure", 0.55f }, { "ktSwell", 0.5f },
+            { "ktRumble", 0.4f }, { "ktRelease", 1.5f }, { "distMix", 0.0f }, { "ecSync", eko4 }, { "ecFeedback", 0.4f },
+            { "ecDark", 0.7f }, { "ecMix", 0.2f }, { "rvbMode", hall }, { "rvbMix", 0.5f }, { "rvbSize", 0.95f } }, {} },
+
+        { "Kapitulationen", "Krigstuban",
+          { { "chamber", krigstuban }, { "master", 4.0f }, { "ktEnsemble", 0.3f }, { "ktPressure", 0.4f }, { "ktSwell", 0.7f }, { "ktFall", 1.0f },
+            { "ktRelease", 2.5f }, { "ktRumble", 0.2f }, { "distMix", 0.0f }, { "tpWow", 0.3f }, { "tpAge", 0.4f },
+            { "rvbMode", hall }, { "rvbMix", 0.4f } }, {} },
+
+        { "Megafonens order", "Krigstuban",
+          { { "chamber", krigstuban }, { "ktBell", megafon }, { "ktEnsemble", 0.4f }, { "ktPressure", 0.9f }, { "ktFlutter", 0.3f },
+            { "ktSwell", 0.0f }, { "ktRelease", 0.3f }, { "distDrive", 14.0f }, { "distMix", 0.4f }, { "rvbMode", rostigTank }, { "rvbMix", 0.3f } }, {} },
+
+        { "Morrande bas", "Krigstuban",
+          { { "chamber", krigstuban }, { "ktEnsemble", 0.2f }, { "ktPressure", 0.7f }, { "ktGrowl", 0.8f }, { "ktFlutter", 0.2f },
+            { "ktSwell", 0.05f }, { "ktFall", 0.2f }, { "ktRelease", 0.3f }, { "ktRumble", 0.5f }, { "distMix", 0.2f },
+            { "rvbMix", 0.15f } }, {} },
+
+        { "Marschen i ruinerna", "Krigstuban",
+          { { "chamber", krigstuban }, { "master", 6.0f }, { "ktRumble", 0.5f }, { "ktEnsemble", 0.45f }, { "ktPressure", 0.75f }, { "ktSwell", 0.0f }, { "ktFall", 0.15f },
+            { "ktRelease", 0.2f }, { "tsRoot", 33.0f }, { "seqTempo", 96.0f }, { "tsRate", 1.0f },
+            { "distMix", 0.15f }, { "rvbMode", hall }, { "rvbMix", 0.3f } },
+          {}, "0a/2 . 0/2 . 0/2 . 3/2 . 5a/5 . 3/2 . 0/2 . -5/2 ." },
+
+        // ------------------------------------------------------------------ Gramofon och megafon
+        { "Gammal 78:a", "Gramofon och megafon",
+          { { "chamber", stalpiano }, { "master", 4.0f }, { "grCrackle", 0.5f }, { "grHiss", 0.45f }, { "grWow", 0.35f }, { "grAge", 0.75f },
+            { "distMix", 0.0f }, { "rvbMode", platta }, { "rvbMix", 0.15f } }, {} },
+
+        { "Skivan som hakar sig", "Gramofon och megafon",
+          { { "chamber", speldosan }, { "sdBox", 0.6f }, { "grCrackle", 0.4f }, { "grHiss", 0.3f }, { "grWow", 0.25f }, { "grAge", 0.5f },
+            { "grSkip", 0.6f }, { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.25f } }, {} },
+
+        { "Kalliopen på grammofon", "Gramofon och megafon",
+          { { "chamber", angorgeln }, { "master", 3.0f }, { "agType", kalliope }, { "agR16", 0.0f }, { "agR8", 1.0f }, { "agR4", 0.6f }, { "agR2", 0.0f },
+            { "agLeak", 0.25f }, { "grCrackle", 0.55f }, { "grHiss", 0.5f }, { "grWow", 0.5f }, { "grAge", 0.85f }, { "distMix", 0.0f },
+            { "rvbMix", 0.1f } }, {} },
+
+        { "Megafonrösten", "Gramofon och megafon",
+          { { "chamber", automaten }, { "atWord", ordDoktorKrang }, { "atVoice", 0.35f }, { "atRepeat", 1.0f }, { "mgAmount", 1.0f },
+            { "mgHorn", 0.6f }, { "mgCrack", 0.5f }, { "mgHum", 0.5f }, { "distMix", 0.0f }, { "ecSync", eko8p }, { "ecFeedback", 0.4f },
+            { "ecMix", 0.25f }, { "rvbMode", hall }, { "rvbMix", 0.4f } }, {} },
+
+        { "Propagandaorkestern", "Gramofon och megafon",
+          { { "chamber", krigstuban }, { "ktEnsemble", 0.7f }, { "ktPressure", 0.7f }, { "mgAmount", 0.8f }, { "mgHorn", 0.35f },
+            { "mgCrack", 0.6f }, { "mgHum", 0.3f }, { "grCrackle", 0.3f }, { "grWow", 0.2f }, { "rvbMode", hall }, { "rvbMix", 0.45f } }, {} },
+
+        // ------------------------------------------------------------------ Folkstämningar
+        // Stämningen (tuSystem, tuRoot, tuBlue) gäller alla melodiska kammare.
+        { "Nyckelharpa i ren stämning", "Folkstämningar",
+          { { "chamber", bordunorgeln }, { "boTimbre", 1.0f }, { "boBow", 0.5f }, { "boDrone", 0.5f }, { "boDroneNote", tonD },
+            { "boSymp", 0.6f }, { "tuSystem", renStamning }, { "tuRoot", grundBordunen }, { "distMix", 0.0f },
+            { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+        { "Blå kulning", "Folkstämningar",
+          { { "chamber", koren }, { "master", 5.0f }, { "koVoices", kulning }, { "koVowel", vokalA }, { "koVibrato", 0.15f }, { "koBreath", 0.15f },
+            { "koAttack", 0.08f }, { "koRelease", 0.6f }, { "tuRoot", tonD }, { "tuBlue", 0.8f }, { "distMix", 0.0f },
+            { "ecSync", 1.0f }, { "ecFeedback", 0.4f }, { "ecDark", 0.6f }, { "ecMix", 0.25f }, { "rvbMode", hall }, { "rvbMix", 0.45f } }, {} },
+        { "Näverlur i naturtoner", "Folkstämningar",
+          { { "chamber", lurblasaren }, { "luType", naverlur }, { "luKey", 2.0f }, { "luBreath", 0.5f }, { "luVibrato", 0.1f },
+            { "luAttack", 0.12f }, { "tuSystem", naturtoner }, { "tuRoot", tonD }, { "distMix", 0.0f },
+            { "ecSync", 1.0f }, { "ecFeedback", 0.35f }, { "ecMix", 0.2f }, { "rvbMode", hall }, { "rvbMix", 0.4f }, { "rvbSize", 0.9f } }, {} },
+        { "Medeltonig kyrkorgel", "Folkstämningar",
+          { { "chamber", angorgeln }, { "agR16", 0.5f }, { "agR8", 1.0f }, { "agR4", 0.7f }, { "agR2", 0.4f },
+            { "agPressure", 0.9f }, { "agChiff", 0.5f }, { "agLeak", 0.05f }, { "agRelease", 0.5f },
+            { "tuSystem", medeltonig }, { "tuRoot", tonC }, { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.45f }, { "rvbSize", 1.0f } }, {} },
+        { "Pytagoreisk kantele", "Folkstämningar",
+          { { "chamber", lutverket }, { "master", 2.0f }, { "ltType", kantele }, { "ltDecay", 8.0f }, { "ltDamper", 1.5f }, { "ltPos", 0.15f },
+            { "tuSystem", pytagoreisk }, { "tuRoot", tonD }, { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+        { "Hackbräde i blått", "Folkstämningar",
+          { { "chamber", stalpiano }, { "master", 1.5f }, { "stMode", hackbrade }, { "tuSystem", renStamning }, { "tuRoot", tonG }, { "tuBlue", 0.5f },
+            { "distMix", 0.0f }, { "rvbMode", hall }, { "rvbMix", 0.3f } }, {} },
+
         // ------------------------------------------------------------------ Modulation
         // Ljud som bygger på Modulationsraden. LFO-form: 0 sinus, 1 triangel, 2 fyrkant, 3 sågtand, 4 slump, 5 glid.
         // Takt: 0 fri, 3 en takt, 4 1/2, 5 1/4, 6 1/8, 7 1/16. Källa: 1 LFO 1, 2 LFO 2, 3 env 1, 4 env 2, 5 modhjul,
@@ -548,8 +786,60 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "distMix", 0.5f }, { "hvRost", 0.4f },
             { "kaAmount", 0.4f }, { "kaSync", kaos16 }, { "kaDrift", 0.0f }, { "kaStutter", 1.0f }, { "kaReverse", 0.4f },
             { "kaCrush", 0.5f } },
+
           { "2000001020000000", "0000000000000010", "0000200000002000", "0000000000000000",
             "0000000000000000", "1011101110111011", "0000000000000000", "0000001000000100" } },
+
+        { "Fabrikshallen", "Trummor",
+          { { "chamber", hammarverket }, { "hv0Sound", 11.0f }, { "hv1Sound", 8.0f }, { "hv2Sound", 2.0f }, { "hv3Sound", 10.0f }, { "hv4Sound", 9.0f }, { "hv5Sound", 5.0f }, { "hv6Sound", 12.0f }, { "hv7Sound", 13.0f }, { "seqTempo", 118.0f }, { "distDrive", 10.0f }, { "rvbMode", rostigTank }, { "rvbMix", 0.22f } },
+          { "2000001020100000",
+            "0000000000001{t+5}001{c2}",
+            "0000200000002001{r1}",
+            "0001{c2}000000010000",
+            "00000000000001{t-5}1{t-3}0",
+            "10101011{r1}10101011{c1}",
+            "0000000000000010",
+            "0000000001{c1}000000" } },
+        { "Folkdans med bjällror", "Trummor",
+          { { "chamber", hammarverket }, { "hv0Sound", 15.0f }, { "hv1Sound", 14.0f }, { "hv2Sound", 4.0f }, { "hv3Sound", 3.0f }, { "hv4Sound", 9.0f }, { "hv5Sound", 7.0f }, { "hv6Sound", 6.0f }, { "hv7Sound", 10.0f }, { "seqTempo", 104.0f }, { "seqSwing", 0.18f }, { "rvbMode", hall }, { "rvbMix", 0.25f } },
+          { "2000001000200000",
+            "1001{c1}001001{c1}001001{c2}",
+            "0000200000002000",
+            "0000000000001000",
+            "000000000000001{t+3}1",
+            "101101101101101{r1}1",
+            "0000000000000000",
+            "0000000000000001{c3}" } },
+        { "Ruinens maskineri", "Trummor",
+          { { "chamber", hammarverket }, { "hv0Sound", 11.0f }, { "hv1Sound", 13.0f }, { "hv2Sound", 12.0f }, { "hv3Sound", 8.0f }, { "hv4Sound", 9.0f }, { "hv5Sound", 10.0f }, { "hv6Sound", 6.0f }, { "hv7Sound", 15.0f }, { "seqTempo", 96.0f }, { "tpWow", 0.3f }, { "tpAge", 0.4f }, { "ecSync", eko8p }, { "ecFeedback", 0.45f }, { "ecMix", 0.2f }, { "rvbMix", 0.25f } },
+          { "2001{c2}0010002001{c3}00",
+            "000000000000001{c2t-7}0",
+            "00001001{c3}00001{d6}000",
+            "01{c2t+2}000001{c3}01{c2t-3}000000",
+            "000000000001{t-5c1}0001{c2}",
+            "1{c1}01{c2}01{c1}01{c3}01{c1}01{c2}01{c1r2}01{c3}0",
+            "0000000000000000",
+            "000000001{c2}0000000" } },
+        { "Ratchetsmedjan", "Trummor",
+          { { "chamber", hammarverket }, { "seqTempo", 124.0f }, { "distDrive", 12.0f }, { "distMix", 0.5f }, { "rvbMode", platta }, { "rvbMix", 0.15f } },
+          { "200010002000101{r1}0",
+            "0000000000000001{r3c1}",
+            "0000200000002001{r2}",
+            "0000000000000000",
+            "001{t+7}0001{t+5}0001{t+3}0001{t}0",
+            "101{r1}0101{r2}0101{r1}0101{r3}0",
+            "01{d2}0001{d2}0001{d5}0001{d2}00",
+            "0000000000000000" } },
+        { "Slumpens trummaskin", "Trummor",
+          { { "chamber", hammarverket }, { "seqTempo", 110.0f }, { "hvRost", 0.5f }, { "distMode", bitkross }, { "distBits", 8.0f }, { "distMix", 0.3f } },
+          { "2001{c2}001{c1}0201{c2}001{c3}00",
+            "00000000000001{c3}01{c3}",
+            "00002001{c3}0000201{c2}0",
+            "0000000000001{c1}000",
+            "01{c3}0001{c3}0001{c3}00001{c2}1{c2}",
+            "11{c2}1{c1}1{c2}11{c2}1{c1}1{c2}11{c2}1{c1}1{c2r1}11{c2}1{c1}1{c3r2}",
+            "0000000000000000",
+            "0001{c2}000001{c2}000000" } },
     };
     return list;
 }

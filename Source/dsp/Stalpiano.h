@@ -18,6 +18,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "Stamning.h"
 #include <array>
 #include <cmath>
 
@@ -70,6 +71,9 @@ struct StalpianoParams
 class Stalpiano
 {
 public:
+    // Stämningen som kammaren spelar i (sätts av motorn; liksvävande om ingen satts).
+    void setStamning (const Stamning* s) { stamning = s != nullptr ? s : &Stamning::neutral(); }
+    const Stamning* stamning = &Stamning::neutral();
     static constexpr int numVoices = 16;
 
     void prepare (double sampleRate, int)
@@ -210,7 +214,7 @@ private:
     {
         const auto mode = params.mode;
         const int note = v.note;
-        const double f0 = 440.0 * std::pow (2.0, (note - 69) / 12.0);
+        const double f0 = stamning->hz (note);
         const float vel = 0.25f + 0.75f * velocity;
 
         const auto& mat = MaterialTraits::get (params.material);

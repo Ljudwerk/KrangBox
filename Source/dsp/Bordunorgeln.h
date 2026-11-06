@@ -8,6 +8,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "Stamning.h"
 #include <array>
 #include <cmath>
 #include <vector>
@@ -115,6 +116,9 @@ private:
 class Bordunorgeln
 {
 public:
+    // Stämningen som kammaren spelar i (sätts av motorn; liksvävande om ingen satts).
+    void setStamning (const Stamning* s) { stamning = s != nullptr ? s : &Stamning::neutral(); }
+    const Stamning* stamning = &Stamning::neutral();
     static constexpr int numVoices = 8;
 
     void prepare (double sampleRate, int)
@@ -151,7 +155,7 @@ public:
         for (auto& v : voices) v.env.setParameters (ep);
         droneEnv.setParameters ({ 0.8f, 0.1f, 1.0f, juce::jmax (0.3f, p.releaseSec * 1.5f) });
 
-        if (p.droneNote != tunedDrone)
+        if (p.droneNote != tunedDrone || stamning->getVersion() != tunedStamning)
             tuneStrings (p.droneNote);
     }
 
@@ -211,7 +215,7 @@ public:
                     v.driftTarget = (random.nextFloat() * 2.0f - 1.0f) * params.drift * 0.15f;
                 v.driftValue += (v.driftTarget - v.driftValue) * 0.0005f;
 
-                const double hz = midiHz (v.note + v.driftValue);
+                const double hz = midiHz (v.note) * std::exp2 (v.driftValue / 12.0);
                 v.phase += hz / sr;
                 v.phase -= std::floor (v.phase);
                 float s = tables.read (v.phase, t, hz);
@@ -275,13 +279,14 @@ private:
         droneOn = any;
     }
 
-    static double midiHz (double note) { return 440.0 * std::pow (2.0, (note - 69.0) / 12.0); }
+    double midiHz (double note) const { return stamning->hz (note); }
 
     // Stämmer resonansssträngarna efter bordunen: grundton, kvint, oktav, ters, kvart, oktav+kvint.
     void tuneStrings (int droneNote)
     {
         if (strings[0].buffer.size() < 8) return; // inte förberedd än
         tunedDrone = droneNote;
+        tunedStamning = stamning->getVersion();
         static constexpr int intervals[numStrings] = { 12, 19, 24, 27, 29, 31 };
         for (int k = 0; k < numStrings; ++k)
         {
@@ -317,7 +322,7 @@ private:
     std::array<SympatheticString, numStrings> strings;
     juce::ADSR droneEnv;
     double dronePhase[2] {};
-    int tunedDrone = -1;
+    int tunedDrone = -1, tunedStamning = -1;
     bool droneOn = false;
     juce::uint32 ageCounter = 0;
     juce::Random random { 0x424f5244 }; // "BORD"

@@ -155,9 +155,11 @@ private:
             pattern.clear();
             for (int lane = 0; lane < juce::jmin ((int) preset.pattern.size(), StepPattern::lanes); ++lane)
             {
-                const juce::String row (preset.pattern[(size_t) lane]);
+                // En rad om 16 steg (eller annan längd) upprepas till 64; chans, ratchets och lås följer med.
+                const auto steps = StepPattern::parseRow (juce::String::fromUTF8 (preset.pattern[(size_t) lane]));
+                if (steps.empty()) continue;
                 for (int step = 0; step < StepPattern::maxSteps; ++step)
-                    pattern.set (lane, step, row[step % juce::jmax (1, row.length())] - '0');
+                    pattern.setStep (lane, step, steps[(size_t) step % steps.size()]);
             }
         }
         if (preset.melody != nullptr && ton != nullptr)

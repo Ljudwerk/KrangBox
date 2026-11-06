@@ -1,0 +1,12 @@
+namn: Domedagens marsch
+tempo: 84
+takter: 4
+swing: 0.08
+mänsklig: 4 8
+ångslaget:  X.....x.X..x....
+smedjan:    ....X.......X..o
+ventilen:   x.o.x.o.x.o.x.oo
+träskedarna: ..o...o...o.o..o
+skrotplåten stäm=-5 längd=6: X...............|................|................|................
+smedjan@4:  ....X...X.X.rrtt
+ramtrumman@4: ........X.X.X.XX

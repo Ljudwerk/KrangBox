@@ -74,6 +74,8 @@ public:
 
     // Senast spelade ton; Radiomastens skala ställer in nålen efter den.
     std::atomic<int> lastNote { -1 };
+    // Ordet som Automaten säger just nu (−1 = tyst), för panelen.
+    std::atomic<int> automatWord { -1 };
     // Modulationskällornas senaste värden (LFO 1–2, envelope 1–2, modhjul, aftertouch, anslag) för lamporna.
     std::array<std::atomic<float>, 7> modSources {};
 

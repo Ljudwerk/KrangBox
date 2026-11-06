@@ -1,11 +1,12 @@
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
 #include "PluginEditor.h"
+#include "ui/ValueFormat.h"
 
 namespace
 {
     // Höjder i designstorlek (bredd 1200).
-    constexpr int topHeight = 230, chamberHeight = 320, angledningHeight = 190, kaosHeight = 130, keyboardHeight = 100;
-    static_assert (topHeight + chamberHeight + angledningHeight + kaosHeight + keyboardHeight == KrangBoxEditor::designHeight);
+    constexpr int topHeight = 230, chamberHeight = 320, angledningHeight = 190, keyboardHeight = 100;
+    static_assert (topHeight + chamberHeight + angledningHeight + keyboardHeight == KrangBoxEditor::designHeight);
 }
 
 KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
@@ -18,9 +19,9 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     setLookAndFeel (&lookAndFeel);
 
     addAndMakeVisible (content);
-    for (auto* c : std::initializer_list<juce::Component*> { &top, &basmalen, &angledningen, &kaos, &keyboard,
+    for (auto* c : std::initializer_list<juce::Component*> { &top, &basmalen, &angledningen, &keyboard,
                                                              &octaveDown, &octaveUp, &keyboardHint,
-                                                             &showChamber, &showSteg, &showModulation })
+                                                             &showChamber, &showSteg, &showModulation, &showKaos })
         content.addAndMakeVisible (c);
     content.addChildComponent (hammarverket);
     content.addChildComponent (bordunorgeln);
@@ -32,10 +33,15 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     content.addChildComponent (lur);
     content.addChildComponent (lut);
     content.addChildComponent (pump);
+    content.addChildComponent (organ);
+    content.addChildComponent (dosa);
+    content.addChildComponent (automat);
+    content.addChildComponent (tuba);
     content.addChildComponent (modulation);
     content.addChildComponent (tonsteg);
+    content.addChildComponent (kaos);
 
-    for (auto* b : { &showChamber, &showSteg, &showModulation })
+    for (auto* b : { &showChamber, &showSteg, &showModulation, &showKaos })
     {
         b->setClickingTogglesState (true);
         b->setRadioGroupId (4711);
@@ -44,6 +50,8 @@ KrangBoxEditor::KrangBoxEditor (KrangBoxProcessor& p)
     showChamber.onClick = [this] { if (showChamber.getToggleState()) { view = View::Kammare; updateCentreView(); } };
     showSteg.onClick = [this] { if (showSteg.getToggleState()) { view = View::Steg; updateCentreView(); } };
     showModulation.onClick = [this] { if (showModulation.getToggleState()) { view = View::Modulation; updateCentreView(); } };
+    showKaos.onClick = [this] { if (showKaos.getToggleState()) { view = View::Kaos; updateCentreView(); } };
+    showKaos.setTooltip (juce::String::fromUTF8 ("Kaosavdelningen: Kaosmotorn, Megafonen, Gramofonen och Krangskopet. Knappen lyser till när Kaosmotorn slår till."));
     showSteg.setTooltip (juce::String::fromUTF8 ("Stegverket för melodier i den valda kammaren (Hammarverket har sitt trummönster i kammarmodulen)."));
     showModulation.setTooltip (juce::String::fromUTF8 ("Modulationsraden: LFO:er, envelopes och matrisen. Siffran visar hur många kopplingar som är i gång."));
 
@@ -110,8 +118,11 @@ void KrangBoxEditor::bindAll()
     bindSlider (top.katedral.slider, id::rvbMix);
     bindSlider (top.master.slider, id::master);
     bindSlider (top.lever.slider, id::krang);
+    bindCombo (top.tuning, id::tuSystem);
+    bindCombo (top.tuningRoot, id::tuRoot);
+    bindSlider (top.blue, id::tuBlue);
 
-    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), stalpiano.bindings(), klockor.bindings(), koren.bindings(), radio.bindings(), lur.bindings(), lut.bindings(), pump.bindings(), angledningen.bindings(), kaos.bindings(), modulation.bindings() })
+    for (auto bindings : { basmalen.bindings(), hammarverket.bindings(), bordunorgeln.bindings(), spolslingan.bindings(), stalpiano.bindings(), klockor.bindings(), koren.bindings(), radio.bindings(), lur.bindings(), lut.bindings(), pump.bindings(), organ.bindings(), dosa.bindings(), automat.bindings(), tuba.bindings(), angledningen.bindings(), kaos.bindings(), modulation.bindings() })
     {
         for (auto& [slider, paramId] : bindings.sliders) bindSlider (*slider, paramId);
         for (auto& [combo, paramId] : bindings.combos)   bindCombo (*combo, paramId);
@@ -143,13 +154,8 @@ void KrangBoxEditor::bindSlider (juce::Slider& slider, const juce::String& param
 
     sliderAttachments.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.state, paramId, slider));
 
-    // Visa värdet med enhet ("400 Hz", "0.250 s"), och låt displayen följa den ratt man vrider på.
-    slider.textFromValueFunction = [param] (double v)
-    {
-        auto text = param->getText (param->convertTo0to1 ((float) v), 0);
-        const auto unit = param->getLabel();
-        return unit.isEmpty() ? text : text + " " + unit;
-    };
+    // Visa värdet i det gemensamma formatet ("400 Hz", "250 ms", "30 %"), och låt displayen följa den ratt man vrider på.
+    slider.textFromValueFunction = [param] (double v) { return krang::ui::formatValue (*param, (float) v); };
     slider.updateText();
     slider.onDragStart = [this, paramId] { lastParam = paramId; };
 }
@@ -194,10 +200,14 @@ void KrangBoxEditor::layoutContent()
     lur.setBounds (chamberArea);
     lut.setBounds (chamberArea);
     pump.setBounds (chamberArea);
+    organ.setBounds (chamberArea);
+    dosa.setBounds (chamberArea);
+    automat.setBounds (chamberArea);
+    tuba.setBounds (chamberArea);
     modulation.setBounds (chamberArea);
     tonsteg.setBounds (chamberArea);
+    kaos.setBounds (chamberArea);
     angledningen.setBounds (r.removeFromTop (angledningHeight));
-    kaos.setBounds (r.removeFromTop (kaosHeight));
 
     auto kb = r.reduced (12, 6);
     auto bar = kb.removeFromTop (26);
@@ -205,6 +215,8 @@ void KrangBoxEditor::layoutContent()
     bar.removeFromLeft (6);
     octaveUp.setBounds (bar.removeFromLeft (64));
     bar.removeFromLeft (12);
+    showKaos.setBounds (bar.removeFromRight (70));
+    bar.removeFromRight (6);
     showModulation.setBounds (bar.removeFromRight (130));
     bar.removeFromRight (6);
     showSteg.setBounds (bar.removeFromRight (110));
@@ -256,15 +268,20 @@ void KrangBoxEditor::updateCentreView()
     lur.setVisible (chamber == 8);
     lut.setVisible (chamber == 9);
     pump.setVisible (chamber == 10);
+    organ.setVisible (chamber == 11);
+    dosa.setVisible (chamber == 12);
+    automat.setVisible (chamber == 13);
+    tuba.setVisible (chamber == 14);
     modulation.setVisible (view == View::Modulation);
     tonsteg.setVisible (view == View::Steg);
+    kaos.setVisible (view == View::Kaos);
 }
 
 void KrangBoxEditor::showParameter (const juce::String& paramId)
 {
     if (auto* param = processor.state.getParameter (paramId))
         top.display.setLines (processor.presets.getCurrentName(),
-                              param->getName (24) + "  " + param->getCurrentValueAsText() + " " + param->getLabel());
+                              param->getName (24) + "  " + krang::ui::formatValue (*param, param->convertFrom0to1 (param->getValue())));
 }
 
 void KrangBoxEditor::fillPresetBox()
@@ -323,7 +340,7 @@ void KrangBoxEditor::timerCallback()
     const float spak  = processor.state.getRawParameterValue (krang::params::id::krang)->load();
     top.tube.setGlow (0.15f + 0.6f * drive + 0.5f * spak);
 
-    // Kaosskopet och kaoslampan.
+    // Krangskopet och kaoslampan (och KAOS-knappen, som lyser till när kaosavdelningen inte visas).
     {
         auto& tap = processor.scope;
         const int w = tap.writeIndex.load (std::memory_order_acquire);
@@ -333,11 +350,18 @@ void KrangBoxEditor::timerCallback()
         kaos.scope.setSamples (scopeCopy.data(), n);
 
         const auto events = processor.kaosEvents.load (std::memory_order_relaxed);
-        if (events != shownKaosEvents) { shownKaosEvents = events; kaos.lamp.flash(); }
+        if (events != shownKaosEvents) { shownKaosEvents = events; kaos.lamp.flash(); kaosFlash = 6; }
         else kaos.lamp.decay();
+        if (kaosFlash >= 0)
+        {
+            showKaos.setColour (juce::TextButton::textColourOffId,
+                                kaosFlash > 0 ? krang::ui::colours::tubeOrange : krang::ui::colours::engraving);
+            --kaosFlash;
+        }
     }
 
     radio.setTunedNote (processor.lastNote.load (std::memory_order_relaxed));
+    automat.setSpokenWord (processor.automatWord.load (std::memory_order_relaxed));
 
     // Kammarmodulen följer kammarväljaren.
     const int chamber = (int) processor.state.getRawParameterValue (krang::params::id::chamber)->load();

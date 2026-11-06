@@ -1,7 +1,10 @@
 // Spolslingan – KrangBox motor för leads, arpeggion och slingor (fas 3).
-// Sex röster med två ljudkällor som blandas:
+// Åtta röster med två ljudkällor som blandas:
 //   FM: en modulator (valfritt förhållande) styr en bärvåg; modulationsindex klingar av efter anslaget,
 //       så att tonen "plinkar" från ljus till mörk – som en metallspole som slås an.
+//   eller Fasvridaren (fasdistorsion som i 80-talets CZ-syntar): en cosinus vars fas vrids så att den blir
+//       sågtand, fyrkant, puls eller en av de tre resonanta vågorna. Vridningen klingar av som FM-indexet,
+//       och en andra oscillator kan sväva mot den första för tjockare ljud.
 //   Munharpa: ett surrande, smalt pulståg (lamellen) genom två resonanta filter vars frekvens sveper
 //       över deltonerna – munhålan som formar övertonsmelodin på en munharpa.
 // Efter rösterna: Radiokorn, en granulär processor som klipper sönder ljudet i korta korn med
@@ -11,6 +14,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "Stamning.h"
 #include <array>
 #include <cmath>
 #include <vector>
@@ -18,8 +22,15 @@
 namespace krang
 {
 
+enum class SpolEngine { FM = 0, Fasvridning };
+enum class PdWave { Sagtand = 0, Fyrkant, Puls, Dubbelsinus, ResSag, ResTriangel, ResTrapets };
+
 struct SpolslinganParams
 {
+    SpolEngine engine = SpolEngine::FM;
+    PdWave pdWave  = PdWave::Sagtand;
+    float pdAmount = 0.7f;     // vridning 0..1 (0 = ren sinus)
+    float pdDetune = 0.0f;     // svävning mellan de två oscillatorerna, cent 0..50
     float ratio      = 2.0f;   // modulator / bärvåg, 0.5..8
     float index      = 3.0f;   // modulationsindex 0..10
     float indexDecay = 0.35f;  // sekunder till indexet klingat av
@@ -35,6 +46,9 @@ struct SpolslinganParams
 class Spolslingan
 {
 public:
+    // Stämningen som kammaren spelar i (sätts av motorn; liksvävande om ingen satts).
+    void setStamning (const Stamning* s) { stamning = s != nullptr ? s : &Stamning::neutral(); }
+    const Stamning* stamning = &Stamning::neutral();
     static constexpr int numVoices = 8;
 
     void prepare (double sampleRate, int)
@@ -119,14 +133,30 @@ public:
             {
                 if (! v.env.isActive()) continue;
                 const float env = v.env.getNextSample();
-                const double hz = 440.0 * std::pow (2.0, (v.note - 69) / 12.0);
+                const double hz = stamning->hz (v.note);
 
-                // FM: index klingar av från fullt till 30 % efter anslaget.
-                const float idx = params.index * (0.3f + 0.7f * (float) std::exp (-v.t / decay));
-                v.modulator += hz * params.ratio / sr;  v.modulator -= std::floor (v.modulator);
-                v.carrier   += hz / sr;                 v.carrier   -= std::floor (v.carrier);
-                const double mod = std::sin (twoPi * v.modulator) * idx;
-                const float fm = (float) std::sin (twoPi * v.carrier + mod);
+                // Klangen klingar av från full till 30 % efter anslaget (FM-index eller vridning).
+                const float shape = 0.3f + 0.7f * (float) std::exp (-v.t / decay);
+                float fm;
+                if (params.engine == SpolEngine::FM)
+                {
+                    const float idx = params.index * shape;
+                    v.modulator += hz * params.ratio / sr;  v.modulator -= std::floor (v.modulator);
+                    v.carrier   += hz / sr;                 v.carrier   -= std::floor (v.carrier);
+                    const double mod = std::sin (twoPi * v.modulator) * idx;
+                    fm = (float) std::sin (twoPi * v.carrier + mod);
+                }
+                else
+                {
+                    const float d = juce::jlimit (0.0f, 1.0f, params.pdAmount * shape);
+                    v.carrier += hz / sr;  v.carrier -= std::floor (v.carrier);
+                    fm = phaseDistort (params.pdWave, v.carrier, d, hz);
+                    if (params.pdDetune > 0.05f)
+                    {
+                        v.modulator += hz * std::pow (2.0, params.pdDetune / 1200.0) / sr;  v.modulator -= std::floor (v.modulator);
+                        fm = 0.6f * (fm + phaseDistort (params.pdWave, v.modulator, d, hz));
+                    }
+                }
 
                 // Munharpa: smalt pulståg (lamellen) genom två svepande resonanser (munhålan).
                 float harp = 0.0f;
@@ -155,6 +185,60 @@ public:
     }
 
 private:
+    // --- Fasvridaren -----------------------------------------------------------
+    // Fasdistorsion: fasen ph (0..1) vrids innan den går genom en cosinus. d = 0 ger en ren sinus för alla
+    // former; d = 1 ger hela formen. Knäna mjukas upp mot nyquist så att höga toner inte viker.
+    float phaseDistort (PdWave w, double ph, float d, double hz) const
+    {
+        const double twoPi = juce::MathConstants<double>::twoPi;
+        const double maxD = juce::jlimit (0.0, 1.0, 1.0 - hz / (sr * 0.12));   // höga toner får mindre vridning
+        const double dd = (double) d * maxD;
+        double p = ph;
+        switch (w)
+        {
+            case PdWave::Sagtand:
+            {
+                const double m = 0.5 - 0.48 * dd;                   // knät flyttas mot början
+                p = ph < m ? 0.5 * ph / m : 0.5 + 0.5 * (ph - m) / (1.0 - m);
+                return (float) -std::cos (twoPi * p);
+            }
+            case PdWave::Fyrkant:
+            {
+                const double half = ph < 0.5 ? ph * 2.0 : (ph - 0.5) * 2.0;
+                const double width = 1.0 - 0.96 * dd;
+                const double y = half < width ? 0.5 * half / width : 0.5;
+                p = (ph < 0.5 ? 0.0 : 0.5) + y;
+                return (float) -std::cos (twoPi * p);
+            }
+            case PdWave::Puls:
+            {
+                const double width = 1.0 - 0.93 * dd;
+                p = ph < width ? ph / width : 1.0;
+                return (float) -std::cos (twoPi * p);
+            }
+            case PdWave::Dubbelsinus:
+            {
+                // Halva perioden vrids till en hel cosinus: två pucklar per varv när d = 1.
+                const double twice = std::fmod (ph * 2.0, 1.0);
+                p = ph + dd * (twice - ph);
+                return (float) -std::cos (twoPi * p);
+            }
+            case PdWave::ResSag:
+            case PdWave::ResTriangel:
+            case PdWave::ResTrapets:
+            {
+                // Resonanta vågor: en snabbare cosinus inuti ett fönster som går till noll vid varvets slut.
+                const double r = 1.0 + 14.0 * dd;
+                const double window = w == PdWave::ResSag ? 1.0 - ph
+                                    : w == PdWave::ResTriangel ? 1.0 - std::abs (2.0 * ph - 1.0)
+                                                               : juce::jmin (1.0, 2.0 * (1.0 - ph));
+                const double centre = w == PdWave::ResTrapets ? 0.25 : 0.5;    // fönstrets medelvärde: håll vågen kring noll
+                return (float) (1.0 - window * (1.0 - std::cos (twoPi * r * ph)) - centre);
+            }
+        }
+        return (float) -std::cos (twoPi * p);
+    }
+
     // --- Radiokorn ------------------------------------------------------------
     float processGrains (float in)
     {

@@ -27,6 +27,11 @@ FetchContent_Declare(clap-juce-extensions
 
 FetchContent_MakeAvailable(JUCE clap-juce-extensions)
 
+# Det delade biblioteket (header-only), bredvid den här mappen. Effekt-DSP:n (Ångledningen) och
+# Krang-stilen ligger där och delas med effektlådan Ångledningen.
+set(KRANG_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../krang-libs" CACHE PATH "Sökväg till krang-libs")
+add_subdirectory(${KRANG_LIBS_DIR} krang-libs)
+
 # --- Pluginet --------------------------------------------------------------
 set(KRANG_FORMATS VST3 Standalone)
 if(APPLE)
@@ -72,6 +77,7 @@ target_link_libraries(KrangBox
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
+        krang::libs
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
@@ -84,7 +90,7 @@ if(KRANG_BUILD_TOOLS)
     target_include_directories(KrangRender PRIVATE Source)
     target_compile_definitions(KrangRender PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(KrangRender
-        PRIVATE juce::juce_audio_formats juce::juce_dsp juce::juce_audio_processors
+        PRIVATE juce::juce_audio_formats juce::juce_dsp juce::juce_audio_processors krang::libs
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
     # Ritar stilprovet till PNG, så att grafiken kan granskas utan DAW.
@@ -93,6 +99,6 @@ if(KRANG_BUILD_TOOLS)
     target_include_directories(KrangSnapshot PRIVATE Source)
     target_compile_definitions(KrangSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(KrangSnapshot
-        PRIVATE juce::juce_gui_basics juce::juce_dsp juce::juce_audio_processors
+        PRIVATE juce::juce_gui_basics juce::juce_dsp juce::juce_audio_processors krang::libs
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 endif()

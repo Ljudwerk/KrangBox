@@ -14,6 +14,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "Stamning.h"
 #include <array>
 #include <cmath>
 
@@ -37,6 +38,9 @@ struct KlockgjuterietParams
 class Klockgjuteriet
 {
 public:
+    // Stämningen som kammaren spelar i (sätts av motorn; liksvävande om ingen satts).
+    void setStamning (const Stamning* s) { stamning = s != nullptr ? s : &Stamning::neutral(); }
+    const Stamning* stamning = &Stamning::neutral();
     static constexpr int numVoices = 12;
 
     void prepare (double sampleRate, int)
@@ -161,7 +165,7 @@ private:
     void strike (Voice& v, int note, float velocity)
     {
         const bool restrike = v.active && v.note == note && v.type == params.type;
-        const double f0 = 440.0 * std::pow (2.0, (note - 69) / 12.0);
+        const double f0 = stamning->hz (note);
         const float vel = 0.25f + 0.75f * velocity;
         const double maxHz = juce::jmin (16000.0, sr * 0.45);
         const float crack = juce::jlimit (0.0f, 1.0f, params.crack);

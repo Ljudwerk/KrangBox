@@ -12,6 +12,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "Stamning.h"
 #include <array>
 #include <cmath>
 #include <vector>
@@ -37,6 +38,9 @@ struct RadiomastenParams
 class Radiomasten
 {
 public:
+    // Stämningen som kammaren spelar i (sätts av motorn; liksvävande om ingen satts).
+    void setStamning (const Stamning* s) { stamning = s != nullptr ? s : &Stamning::neutral(); }
+    const Stamning* stamning = &Stamning::neutral();
     static constexpr int numVoices = 8;
 
     void prepare (double sampleRate, int)
@@ -184,7 +188,7 @@ private:
     void renderVoice (Voice& v, float* dest, int numSamples)
     {
         const double twoPi = juce::MathConstants<double>::twoPi;
-        const double baseHz = 440.0 * std::pow (2.0, (v.note - 69) / 12.0);
+        const double baseHz = stamning->hz (v.note);
         const float bw = juce::jlimit (0.0f, 1.0f, params.bandwidth);
         v.receiver.setCutoffFrequency (800.0f * std::pow (11.0f, bw));    // 0,8–8,8 kHz
         v.receiver.setResonance (0.7f + 2.5f * (1.0f - bw));               // smal mottagare blir burkig

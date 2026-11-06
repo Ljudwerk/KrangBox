@@ -1,5 +1,5 @@
 // KrangEngine – kopplar ihop kammare och Ångledningen:
-// kammare -> Kaosmotorn -> Krangdistortion -> Ångfilter -> Bandmaskin -> Ekokammare -> DC-spärr/master -> Katedralreverb (stereo) -> limiter.
+// kammare -> Kaosmotorn -> Krangdistortion -> Ångfilter -> Megafonen -> Bandmaskin -> Gramofonen -> Ekokammare -> DC-spärr/master -> Katedralreverb (stereo) -> limiter.
 // Delas av pluginet och KrangRender så att lyssningstest låter exakt som pluginet.
 //
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
@@ -16,6 +16,10 @@
 #include "Lurblasaren.h"
 #include "Lutverket.h"
 #include "Vattenpumpen.h"
+#include "Angorgeln.h"
+#include "Speldosan.h"
+#include "Automaten.h"
+#include "Krigstuban.h"
 #include "Modulation.h"
 #include "Slingan.h"
 #include "TonStegverket.h"
@@ -23,13 +27,16 @@
 #include "Stegverket.h"
 #include "Angledningen.h"
 #include "Bandmaskin.h"
+#include "Gramofonen.h"
+#include "Stamning.h"
 #include "Kaosmotorn.h"
 
 namespace krang
 {
 
 // Vilken kammare (ljudmotor) som spelar. Fler tillkommer i fas 3.
-enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan, Stalpiano, Klockgjuteriet, Koren, Radiomasten, Lurblasaren, Lutverket, Vattenpumpen };
+enum class Chamber { Basmalen = 0, Hammarverket, Bordunorgeln, Spolslingan, Stalpiano, Klockgjuteriet, Koren, Radiomasten, Lurblasaren, Lutverket, Vattenpumpen,
+                     Angorgeln, Speldosan, Automaten, Krigstuban };
 
 struct EngineParams
 {
@@ -45,6 +52,10 @@ struct EngineParams
     LurblasarenParams lur;
     LutverketParams lut;
     VattenpumpenParams pump;
+    AngorgelnParams organ;
+    SpeldosanParams dosa;
+    AutomatenParams automat;
+    KrigstubanParams tuba;
     SlinganSettings slingan;
     StegverketSettings stegverket;
     TonSettings ton;
@@ -52,6 +63,9 @@ struct EngineParams
     FxFilterParams filter;
     KaosParams kaos;
     TapeParams tape;
+    MegafonParams megafon;
+    GramofonParams gramofon;
+    StamningParams stamning;   // stämning för alla melodiska kammare
     EchoParams echo;
     ReverbParams reverb;
     float masterDb = 0.0f;
@@ -92,6 +106,8 @@ inline void applyKrangspaken (EngineParams& e, float k)
     e.bordunorgeln.bow   = toward (e.bordunorgeln.bow, 1.0f, 0.6f);
 
     e.spolslingan.index  = toward (e.spolslingan.index, 10.0f, 0.6f);
+    e.spolslingan.pdAmount = toward (e.spolslingan.pdAmount, 1.0f, 0.6f);
+    e.spolslingan.pdDetune = e.spolslingan.pdDetune + 20.0f * k;
     e.spolslingan.grain  = toward (e.spolslingan.grain, 0.6f, 0.8f);
     e.spolslingan.spread = toward (e.spolslingan.spread, 1.0f);
 
@@ -120,11 +136,35 @@ inline void applyKrangspaken (EngineParams& e, float k)
     e.pump.rust     = toward (e.pump.rust, 0.7f, 0.7f);
     e.pump.water    = toward (e.pump.water, 1.0f, 0.5f);
 
+    e.organ.pressure  = toward (e.organ.pressure, 0.15f, 0.8f);   // trycket sviktar: orgeln jamar och sjunker
+    e.organ.leak      = toward (e.organ.leak, 0.9f, 0.7f);
+    e.organ.tremulant = toward (e.organ.tremulant, 0.6f, 0.5f);
+
+    e.dosa.spring = toward (e.dosa.spring, 1.0f, 0.8f);           // fjädern tar slut
+    e.dosa.rust   = toward (e.dosa.rust, 0.8f, 0.7f);
+    e.dosa.works  = toward (e.dosa.works, 0.8f, 0.6f);
+
+    e.automat.broken   = toward (e.automat.broken, 1.0f, 0.8f);   // maskinen hackar och tappar ljud
+    e.automat.monotone = toward (e.automat.monotone, 1.0f, 0.6f);
+    e.automat.voice    = toward (e.automat.voice, 0.55f, 0.5f);
+
+    e.tuba.pressure = toward (e.tuba.pressure, 1.0f, 0.8f);         // läpparna smäller, muren av mässing skriker
+    e.tuba.growl    = toward (e.tuba.growl, 0.8f, 0.7f);
+    e.tuba.ensemble = toward (e.tuba.ensemble, 1.0f, 0.6f);
+    e.tuba.rumble   = toward (e.tuba.rumble, 0.8f, 0.5f);
+
     e.tape.wow     = toward (e.tape.wow, 0.7f, 0.6f);
     e.tape.age     = toward (e.tape.age, 0.8f, 0.6f);
     e.tape.dropout = toward (e.tape.dropout, 0.5f, 0.5f);
     if (e.echo.mix > 0.001f)
         e.echo.feedback = toward (e.echo.feedback, 1.05f, 0.5f); // ekot börjar självsvänga
+    if (e.megafon.amount > 0.001f)
+        e.megafon.crack = toward (e.megafon.crack, 1.0f, 0.7f);   // membranet spricker
+    if (e.gramofon.crackle + e.gramofon.hiss + e.gramofon.wow + e.gramofon.age + e.gramofon.skip > 0.001f)
+    {
+        e.gramofon.crackle = toward (e.gramofon.crackle, 0.8f, 0.6f);
+        e.gramofon.skip    = toward (e.gramofon.skip, 0.6f, 0.6f);   // nålen hoppar
+    }
 
     // Kaosmotorn vaknar: maskinen börjar hacka även om kaoset var avstängt.
     auto& ka = e.kaos;
@@ -153,7 +193,8 @@ inline void applyModulation (EngineParams& e, const Modulation& m)
                                           for (auto& d : e.hammarverket.drums) d.tune = juce::jlimit (-12.0f, 12.0f, d.tune + k * 7.0f);
                                           break;
             case Chamber::Bordunorgeln:   e.bordunorgeln.timbre = clamp01 (e.bordunorgeln.timbre + k * 0.5f); break;
-            case Chamber::Spolslingan:    e.spolslingan.index = juce::jlimit (0.0f, 10.0f, e.spolslingan.index + k * 5.0f); break;
+            case Chamber::Spolslingan:    e.spolslingan.index = juce::jlimit (0.0f, 10.0f, e.spolslingan.index + k * 5.0f);
+                                          e.spolslingan.pdAmount = clamp01 (e.spolslingan.pdAmount + k * 0.5f); break;
             case Chamber::Stalpiano:      e.stalpiano.hardness = clamp01 (e.stalpiano.hardness + k * 0.5f); break;
             case Chamber::Klockgjuteriet: e.klockor.hardness = clamp01 (e.klockor.hardness + k * 0.5f); break;
             case Chamber::Koren:          e.koren.vowel = clamp01 (e.koren.vowel + k * 0.5f); break;
@@ -161,6 +202,10 @@ inline void applyModulation (EngineParams& e, const Modulation& m)
             case Chamber::Lurblasaren:    e.lur.breath = clamp01 (e.lur.breath + k * 0.5f); break;
             case Chamber::Lutverket:      e.lut.brightness = clamp01 (e.lut.brightness + k * 0.5f); break;
             case Chamber::Vattenpumpen:   e.pump.pressure = clamp01 (e.pump.pressure + k * 0.5f); break;
+            case Chamber::Angorgeln:      for (size_t r = 2; r < 5; ++r) e.organ.ranks[r] = clamp01 (e.organ.ranks[r] + k * 0.6f); break;
+            case Chamber::Speldosan:      e.dosa.hardness = clamp01 (e.dosa.hardness + k * 0.5f); break;
+            case Chamber::Automaten:      e.automat.voice = clamp01 (e.automat.voice + k * 0.5f); break;
+            case Chamber::Krigstuban:     e.tuba.pressure = clamp01 (e.tuba.pressure + k * 0.5f); break;
         }
     }
     e.distortion.driveDb = juce::jlimit (0.0f, 60.0f, e.distortion.driveDb + amount (ModDest::Krangdrive) * 24.0f);
@@ -180,6 +225,11 @@ class KrangEngine
 public:
     void prepare (double sampleRate, int maxBlockSize)
     {
+        basmalen.setStamning (&stamning);   bordunorgeln.setStamning (&stamning); spolslingan.setStamning (&stamning);
+        stalpiano.setStamning (&stamning);  klockor.setStamning (&stamning);      koren.setStamning (&stamning);
+        radio.setStamning (&stamning);      lur.setStamning (&stamning);          lut.setStamning (&stamning);
+        pump.setStamning (&stamning);       organ.setStamning (&stamning);        dosa.setStamning (&stamning);
+        tuba.setStamning (&stamning);
         basmalen.prepare (sampleRate, maxBlockSize);
         hammarverket.prepare (sampleRate, maxBlockSize);
         bordunorgeln.prepare (sampleRate, maxBlockSize);
@@ -191,10 +241,16 @@ public:
         lur.prepare (sampleRate, maxBlockSize);
         lut.prepare (sampleRate, maxBlockSize);
         pump.prepare (sampleRate, maxBlockSize);
+        organ.prepare (sampleRate, maxBlockSize);
+        dosa.prepare (sampleRate, maxBlockSize);
+        automat.prepare (sampleRate, maxBlockSize);
+        tuba.prepare (sampleRate, maxBlockSize);
         distortion.prepare (sampleRate, maxBlockSize);
         filter.prepare (sampleRate, maxBlockSize);
         kaos.prepare (sampleRate, maxBlockSize);
         tape.prepare (sampleRate, maxBlockSize);
+        megafon.prepare (sampleRate, maxBlockSize);
+        gramofon.prepare (sampleRate, maxBlockSize);
         echo.prepare (sampleRate, maxBlockSize);
         reverb.prepare (sampleRate, maxBlockSize);
         modulation.prepare (sampleRate);
@@ -219,10 +275,16 @@ public:
         lur.reset();
         lut.reset();
         pump.reset();
+        organ.reset();
+        dosa.reset();
+        automat.reset();
+        tuba.reset();
         distortion.reset();
         filter.reset();
         kaos.reset();
         tape.reset();
+        megafon.reset();
+        gramofon.reset();
         echo.reset();
         reverb.reset();
         limiter.reset();
@@ -264,8 +326,13 @@ private:
             lur.allNotesOff();
             lut.allNotesOff();
             pump.allNotesOff();
+            organ.allNotesOff();
+            dosa.allNotesOff();
+            automat.allNotesOff();
+            tuba.allNotesOff();
             chamber = p.chamber;
         }
+        stamning.setParams (p.stamning);   // före kamrarna, så att Bordunorgeln stämmer om sina strängar direkt
         basmalen.setParams (p.basmalen);
         hammarverket.setParams (p.hammarverket);
         bordunorgeln.setParams (p.bordunorgeln);
@@ -277,10 +344,16 @@ private:
         lur.setParams (p.lur);
         lut.setParams (p.lut);
         pump.setParams (p.pump);
+        organ.setParams (p.organ);
+        dosa.setParams (p.dosa);
+        automat.setParams (p.automat);
+        tuba.setParams (p.tuba);
         distortion.setParams (p.distortion);
         filter.setParams (p.filter);
         kaos.setParams (p.kaos, p.bpm);
         tape.setParams (p.tape);
+        megafon.setParams (p.megafon);
+        gramofon.setParams (p.gramofon);
         echo.setParams (p.echo, p.bpm);
         reverb.setParams (p.reverb);
         masterGain.setTargetValue (juce::Decibels::decibelsToGain (p.masterDb));
@@ -296,6 +369,8 @@ public:
             modulation.advance (0);
             configure();
         }
+        if (chamber == Chamber::Hammarverket && m.isController())
+            hammarverket.controller (m.getControllerNumber(), m.getControllerValue());   // parameterlås
         if (m.isNoteOn())
         {
             switch (chamber)
@@ -310,6 +385,10 @@ public:
                 case Chamber::Lurblasaren:  lur.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Lutverket:    lut.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Vattenpumpen: pump.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Angorgeln:    organ.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Speldosan:    dosa.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Automaten:    automat.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
+                case Chamber::Krigstuban:   tuba.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
                 case Chamber::Basmalen:     basmalen.noteOn (m.getNoteNumber(), m.getFloatVelocity()); break;
             }
         }
@@ -327,6 +406,10 @@ public:
                 case Chamber::Lurblasaren:  lur.noteOff (m.getNoteNumber()); break;
                 case Chamber::Lutverket:    lut.noteOff (m.getNoteNumber()); break;
                 case Chamber::Vattenpumpen: pump.noteOff (m.getNoteNumber()); break;
+                case Chamber::Angorgeln:    organ.noteOff (m.getNoteNumber()); break;
+                case Chamber::Speldosan:    dosa.noteOff (m.getNoteNumber()); break;
+                case Chamber::Automaten:    automat.noteOff (m.getNoteNumber()); break;
+                case Chamber::Krigstuban:   tuba.noteOff (m.getNoteNumber()); break;
                 case Chamber::Basmalen:     basmalen.noteOff (m.getNoteNumber()); break;
             }
         }
@@ -343,6 +426,10 @@ public:
             lur.allNotesOff();
             lut.allNotesOff();
             pump.allNotesOff();
+            organ.allNotesOff();
+            dosa.allNotesOff();
+            automat.allNotesOff();
+            tuba.allNotesOff();
         }
         else if (m.isSustainPedalOn() || m.isSustainPedalOff())
         {
@@ -390,12 +477,18 @@ private:
             case Chamber::Lurblasaren:  lur.render (left, numSamples); break;
             case Chamber::Lutverket:    lut.render (left, numSamples); break;
             case Chamber::Vattenpumpen: pump.render (left, numSamples); break;
+            case Chamber::Angorgeln:    organ.render (left, numSamples); break;
+            case Chamber::Speldosan:    dosa.render (left, numSamples); break;
+            case Chamber::Automaten:    automat.render (left, numSamples); break;
+            case Chamber::Krigstuban:   tuba.render (left, numSamples); break;
             case Chamber::Basmalen:     basmalen.render (left, numSamples); break;
         }
         kaos.process (left, numSamples);
         distortion.process (left, numSamples);
         filter.process (left, numSamples);
+        megafon.process (left, numSamples);
         tape.process (left, numSamples);
+        gramofon.process (left, numSamples);
         echo.process (left, numSamples);
 
         for (int i = 0; i < numSamples; ++i)
@@ -420,11 +513,13 @@ private:
 
 public:
     juce::uint32 getKaosEventCount() const { return kaos.getEventCount(); }
+    int getAutomatWord() const { return chamber == Chamber::Automaten ? automat.currentWord() : -1; }
 
     int getLatencyInSamples() const { return distortion.getLatencyInSamples(); }
 
 private:
     Chamber chamber = Chamber::Basmalen;
+    Stamning stamning;
     Basmalen basmalen;
     Hammarverket hammarverket;
     Bordunorgeln bordunorgeln;
@@ -436,10 +531,16 @@ private:
     Lurblasaren lur;
     Lutverket lut;
     Vattenpumpen pump;
+    Angorgeln organ;
+    Speldosan dosa;
+    Automaten automat;
+    Krigstuban tuba;
     KrangDistortion distortion;
     AngFilter filter;
     Kaosmotorn kaos;
     Bandmaskin tape;
+    Megafonen megafon;
+    Gramofonen gramofon;
     Ekokammare echo;
     Katedralreverb reverb;
     juce::dsp::Limiter<float> limiter;

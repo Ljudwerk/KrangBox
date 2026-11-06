@@ -355,7 +355,7 @@ public:
     {
         textures::fillChassis (g, getLocalBounds().toFloat(), 0.25f);
         drawModuleFrame (g, gridFrame.toFloat(), u8 ("Stegverket · toner"));
-        drawModuleFrame (g, sideFrame.toFloat(), "Slingan");
+        drawModuleFrame (g, sideFrame.toFloat(), "Skalan");
 
         g.setColour (colours::brass);
         g.setFont (panelFont (10.0f, false));
