@@ -95,10 +95,11 @@ if(KRANG_BUILD_TOOLS)
 
     # Ritar stilprovet till PNG, så att grafiken kan granskas utan DAW.
     juce_add_console_app(KrangSnapshot PRODUCT_NAME "KrangSnapshot")
-    target_sources(KrangSnapshot PRIVATE tools/KrangSnapshot.cpp)
+    # Klicktestet öppnar den riktiga panelen med den riktiga processorn, därför byggs de in här.
+    target_sources(KrangSnapshot PRIVATE tools/KrangSnapshot.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp)
     target_include_directories(KrangSnapshot PRIVATE Source)
-    target_compile_definitions(KrangSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_compile_definitions(KrangSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1 JucePlugin_Name="KrangBox")
     target_link_libraries(KrangSnapshot
-        PRIVATE juce::juce_gui_basics juce::juce_dsp juce::juce_audio_processors krang::libs
+        PRIVATE juce::juce_gui_basics juce::juce_gui_extra juce::juce_dsp juce::juce_audio_processors juce::juce_audio_utils krang::libs
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 endif()

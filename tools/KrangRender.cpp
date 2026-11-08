@@ -143,8 +143,37 @@ Stats analyse (const juce::AudioBuffer<float>& b)
              juce::Decibels::gainToDecibels (0.5f * (b.getRMSLevel (0, 0, n) + b.getRMSLevel (1, 0, n))), sum / n, finite };
 }
 
+// --test: inga WAV-filer, bara kontrollerna (se main).
+bool onlyTest = false;
+
+// Räknar raderna som slutar på OK eller FEL, så att --test kan summera alla kontroller oavsett var de skrivs ut.
+struct ControlCounter : std::streambuf
+{
+    explicit ControlCounter (std::streambuf* t) : target (t) {}
+    int ok = 0, failed = 0;
+    std::string line;
+    int overflow (int c) override
+    {
+        if (c == EOF) return target->pubsync() == 0 ? 0 : EOF;
+        if (c == '\n')
+        {
+            auto trimmed = line;
+            while (! trimmed.empty() && (trimmed.back() == ' ' || trimmed.back() == '\r')) trimmed.pop_back();
+            auto endsWith = [&] (const char* w) { const std::string ws (w); return trimmed.size() >= ws.size() && trimmed.compare (trimmed.size() - ws.size(), ws.size(), ws) == 0; };
+            if (endsWith (" OK") || trimmed == "OK") ++ok;
+            else if (endsWith (" FEL") || endsWith ("FEL)")) ++failed;
+            line.clear();
+        }
+        else line.push_back ((char) c);
+        return target->sputc ((char) c);
+    }
+    int sync() override { return target->pubsync(); }
+    std::streambuf* target;
+};
+
 void writeWav (const juce::File& file, const juce::AudioBuffer<float>& b, double sr)
 {
+    if (onlyTest) return;
     file.deleteFile();
     juce::WavAudioFormat wav;
     std::unique_ptr<juce::AudioFormatWriter> writer (wav.createWriterFor (new juce::FileOutputStream (file), sr, 2, 24, {}, 0));
@@ -188,9 +217,35 @@ int main (int argc, char* argv[])
 {
     if (argc < 2)
     {
-        std::cerr << "Användning: KrangRender <utkatalog> [samplerate]\n";
+        std::cerr << "Användning:\n"
+                     "  KrangRender --test                          alla kontroller, OK/FEL, felkod om något brister\n"
+                     "  KrangRender <utkatalog> [samplerate]         samma kontroller, och renderingar för lyssning (WAV)\n"
+                     "  KrangRender --state \"<preset>\" <fil.xml> [id=värde ...]\n"
+                     "  KrangRender --project <spec.json> <mix.wav>\n";
         return 1;
     }
+
+    // KrangRender --test: kontrollerna utan renderingar (grinden i CI). Räknar och summerar.
+    std::unique_ptr<ControlCounter> counter;
+    std::streambuf* original = nullptr;
+    if (juce::String (argv[1]) == "--test")
+    {
+        onlyTest = true;
+        counter = std::make_unique<ControlCounter> (std::cout.rdbuf());
+        original = std::cout.rdbuf (counter.get());
+    }
+    struct Restore
+    {
+        ControlCounter* c; std::streambuf* o;
+        ~Restore()
+        {
+            if (c == nullptr) return;
+            std::cout.flush();
+            std::cout.rdbuf (o);
+            std::cout << "\nKrangRender --test: " << (c->ok + c->failed) << " kontroller, "
+                      << c->ok << " OK, " << c->failed << " FEL\n";
+        }
+    } restore { counter.get(), original };
 
     // KrangRender --state "<preset>" <fil.xml> [param=värde ...]
     // Skriver pluginets tillstånd (samma XML som pluginet sparar) för ett fabrikspreset, med valfria ändringar.
@@ -324,9 +379,10 @@ int main (int argc, char* argv[])
         return problems == 0 ? 0 : 2;
     }
 
-    const juce::File outDir = juce::File::getCurrentWorkingDirectory().getChildFile (argv[1]);
-    outDir.createDirectory();
-    const double sr = argc > 2 ? juce::String (argv[2]).getDoubleValue() : 48000.0;
+    const juce::File outDir = onlyTest ? juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                       : juce::File::getCurrentWorkingDirectory().getChildFile (argv[1]);
+    if (! onlyTest) outDir.createDirectory();
+    const double sr = (! onlyTest && argc > 2) ? juce::String (argv[2]).getDoubleValue() : 48000.0;
     constexpr int blockSize = 256;
     const char* modes[] = { "ror", "fuzz", "vikning", "bitkross" };
     int failures = 0, latency = 0;

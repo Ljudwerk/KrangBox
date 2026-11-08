@@ -4,7 +4,7 @@
 
 Instrument-plugin (VST3, AU, CLAP) och fristående app för macOS. Allt ljud är syntetiskt.
 
-**Status: fas 3 och 3b klara i kod, grind 3 återstår.** Elva kammare: Basmålen (bas), Hammarverket (trummaskin med Stegverket), Bordunorgeln (drön och folkklanger), Spolslingan (leads och slingor med arpeggiatorn Slingan) Stålpiano (piano, hackbräde och preparerat piano) Klockgjuteriet (klockor och gonger) Kören i schaktet (kör, psalmsång och kulning) Radiomasten (brus, signaler och atmosfär) Lurblåsaren (blåsinstrument) Lutverket (knäppta strängar) och Vattenpumpen (stråkad metall). Kaosmotorn gör allt opålitligt. Alla parametrar sitter på Krang-panelen, som skalas proportionellt mellan 60 och 160 %.
+**Status: fas 3d pågår, grind 3 förberedd men inte godkänd** (se [PLAN.md](PLAN.md)). Femton kammare: Basmålen (bas), Hammarverket (trummaskin med Stegverket), Bordunorgeln (drön och folkklanger), Spolslingan (leads och slingor med arpeggiatorn Slingan), Stålpiano, Klockgjuteriet, Kören i schaktet, Radiomasten, Lurblåsaren, Lutverket, Vattenpumpen, Ångorgeln, Speldosan, Automaten (Doktor Krangs leksaker) och Krigstuban. Kaosmotorn gör allt opålitligt. Alla parametrar sitter på Krang-panelen, som skalas proportionellt mellan 60 och 160 %.
 
 ![Krang-panelen med Basmålen](docs/krangpanelen_basmalen.png)
 
@@ -100,8 +100,8 @@ Byt `arm64` mot `x86_64` på en Intel-Mac.
 | `KrangBox_AU` | `KrangBox.component` |
 | `KrangBox_CLAP` | `KrangBox.clap` |
 | `KrangBox_Standalone` | `KrangBox.app` |
-| `KrangRender` | Verktyget för lyssningstest (se nedan) |
-| `KrangSnapshot` | Ritar stilprovet till PNG: `KrangSnapshot docs/stilprov.png 2 docs/stegverket.png --tid` (med `--tid`: mäter rittiden, även Krangskopet); `KrangSnapshot --kaos fil.png` ritar kaosavdelningen; `KrangSnapshot --jugend fil.png` ritar alla jugendillustrationer |
+| `KrangRender` | Testfallen (`--test`) och renderingar för lyssningstest (se nedan) |
+| `KrangSnapshot` | Ritar stilprovet till PNG: `KrangSnapshot docs/stilprov.png 2 docs/stegverket.png --tid` (med `--tid`: mäter rittiden, även Krangskopet); `KrangSnapshot --kaos fil.png` ritar kaosavdelningen; `KrangSnapshot --jugend fil.png` ritar alla jugendillustrationer; `KrangSnapshot --klicktest` klickar sig igenom hela panelen |
 
 ### Installera i din DAW
 
@@ -142,14 +142,18 @@ Byggena hamnar då i `build/KrangBox_artefacts/Release/` på samma sätt.
 pluginval --strictness-level 5 --validate build/KrangBox_artefacts/Release/VST3/KrangBox.vst3
 ```
 
-## Lyssningstest
+## Testerna och lyssningstest
 
 ```sh
-cmake --build build --config Release --target KrangRender
-./build/KrangRender_artefacts/Release/KrangRender renders
+cmake --build build --config Release --target KrangRender KrangSnapshot
+./build/KrangRender_artefacts/Release/KrangRender --test          # alla kontroller, OK/FEL (465 kontroller)
+./build/KrangSnapshot_artefacts/Release/KrangSnapshot --klicktest  # hela panelen (701 kontroller)
+./build/KrangRender_artefacts/Release/KrangRender renders         # samma kontroller, och renderingar för lyssning
 ```
 
-Renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross), varje trumröst för sig, varje filter- och reverbläge (med hög resonans och stort rum, som stresstest) Stegverkets startmönster och alla fabrikspresets till WAV. Testar också Stegverkets timing mot en simulerad DAW, den interna klockan och gung, på sample-nivå, att alla fabrikspresets ligger mellan −16 och −7 dBFS RMS, och att tre presets förblir stabila med Krangspaken i topp, att Slingan spelar tonerna i rätt ordning och på rätt sample, och att Bordunorgeln med åtta röster håller sig under 25 % av en processorkärna. Ekokammarens tid mäts på sample-nivå, ekot ska överleva 110 % återkoppling, Kaosmotorn ska slå till på taktslagen utan klick och vara helt avstängd på noll. Stålpianot renderas i alla tre lägena, pedalen testas (en släppt ton ska tystna utan pedal och klinga vidare med), och sexton röster ska hålla sig under 25 % av en kärna. Alla sex strängmaterial renderas; stålets ton ska ligga still medan djurhudens sjunker efter anslaget, och silke och djurhud ska klinga kortare än stål. Klockgjuteriet renderas i alla fem klocktyper, även spruckna med Krangspaken i botten; svepet ska höja tonen och tolv gonger ska hålla sig under 25 % av en kärna. Kören renderas i alla röstlägen; vokalerna A och I ska gå att skilja åt i spektrum, och 64 sångare ska hålla sig under 25 % av en kärna. Radiomasten renderas i alla fyra sändningar; telegrafens prickar och streck mäts mot tempot, och storm i botten ska förbli stabil. Lurblåsarens fyra instrument ska ljuda på rätt ton, naturtonerna ska dra tonen till lurens övertoner, och allt i botten ska förbli stabilt. Lutverkets fyra instrument ska ligga rätt i stämning i bas, mellanläge och diskant, dämparen ska tysta släppta toner, och 36 strängar ska hålla sig under 25 % av en kärna. Vattenpumpens fyra metaller ska ligga på rätt ton, sågens glid ska landa på nästa ton, och allt i botten ska förbli stabilt. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
+`KrangRender --test` kör alla kontroller utan att skriva några filer och slutar med en felkod om något brister – det är grinden i CI. `KrangSnapshot --klicktest` öppnar den riktiga panelen med den riktiga processorn och går igenom alla femton kammare och vyerna STEGVERKET, MODULATION och KAOS: varje ratt och fader dras (och ska ändra exakt en parameter) och dubbelklickas (och ska ge standardvärdet), varje lista stegas genom alla sina val, spakarna och SPELA trycks, och en ton från keyboardet ska höras. Till sist ska alla parametrar ha nåtts från panelen. Att klicka på tangenterna och datorns tangenter kräver en skärm och provas på Macen.
+
+Renderingarna: renderar en basslinga i D-dorisk genom alla fyra distortionslägen (Rör, Fuzz, Vikning, Bitkross), en trumslinga från Hammarverket (torr, Rör och Bitkross), varje trumröst för sig, varje filter- och reverbläge (med hög resonans och stort rum, som stresstest) Stegverkets startmönster och alla fabrikspresets till WAV. Testar också Stegverkets timing mot en simulerad DAW, den interna klockan och gung, på sample-nivå, att alla fabrikspresets ligger mellan −16 och −7 dBFS RMS, och att tre presets förblir stabila med Krangspaken i topp, att Slingan spelar tonerna i rätt ordning och på rätt sample, och att Bordunorgeln med åtta röster håller sig under 25 % av en processorkärna. Ekokammarens tid mäts på sample-nivå, ekot ska överleva 110 % återkoppling, Kaosmotorn ska slå till på taktslagen utan klick och vara helt avstängd på noll. Stålpianot renderas i alla tre lägena, pedalen testas (en släppt ton ska tystna utan pedal och klinga vidare med), och sexton röster ska hålla sig under 25 % av en kärna. Alla sex strängmaterial renderas; stålets ton ska ligga still medan djurhudens sjunker efter anslaget, och silke och djurhud ska klinga kortare än stål. Klockgjuteriet renderas i alla fem klocktyper, även spruckna med Krangspaken i botten; svepet ska höja tonen och tolv gonger ska hålla sig under 25 % av en kärna. Kören renderas i alla röstlägen; vokalerna A och I ska gå att skilja åt i spektrum, och 64 sångare ska hålla sig under 25 % av en kärna. Radiomasten renderas i alla fyra sändningar; telegrafens prickar och streck mäts mot tempot, och storm i botten ska förbli stabil. Lurblåsarens fyra instrument ska ljuda på rätt ton, naturtonerna ska dra tonen till lurens övertoner, och allt i botten ska förbli stabilt. Lutverkets fyra instrument ska ligga rätt i stämning i bas, mellanläge och diskant, dämparen ska tysta släppta toner, och 36 strängar ska hålla sig under 25 % av en kärna. Vattenpumpens fyra metaller ska ligga på rätt ton, sågens glid ska landa på nästa ton, och allt i botten ska förbli stabilt. Kontrollerar NaN, toppnivå, DC och att Basmålens lägen ligger inom 1,5 dB från varandra i nivå.
 
 ## Hammarverket
 
@@ -734,8 +738,8 @@ Fabrikspresets finns i `Source/presets/FactoryPresets.h`: varje preset listar ba
 | `Source/ui/StegverketPanel.h` | Stegverkets lamprutnät och transport | Philip |
 | `Source/presets/` | Fabrikspresets och PresetManager (spara, ladda, DAW-program) | Doktor Krang |
 | `Source/PluginEditor.*` | Krang-panelen: skalning, koppling av alla parametrar, presets, keyboard | Philip |
-| `tools/KrangRender.cpp` | Offline-rendering för lyssningstest och CI | Doktor Krang |
-| `tools/KrangSnapshot.cpp` | Ritar stilprovet till PNG för granskning utan DAW | Philip |
+| `tools/KrangRender.cpp` | Testfallen (`--test`), offline-rendering för lyssningstest och Reaper-skripten | Doktor Krang |
+| `tools/KrangSnapshot.cpp` | Ritar panelen och illustrationerna till PNG, och klicktestet | Philip |
 | `docs/` | Bilder på Krang-panelen, stilprovet och Stegverket | – |
 | `.github/workflows/` | macOS-bygge, renderingstest och pluginval | Justine |
 

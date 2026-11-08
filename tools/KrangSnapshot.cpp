@@ -7,6 +7,8 @@
 //   KrangSnapshot --spolslingan <fil.png> [pd]   (Spolslingan med FM-spolen eller Fasvridaren)
 //   KrangSnapshot --hammarverket <fil.png> [läge 0–4]   (Hammarverket med kit, chans, ratchets och lås)
 //   KrangSnapshot --tonsteg <fil.png> [skala] [sida]   (Tonstegverket med startmelodin; med sida: STEG 16 och den sidan öppen)
+//   KrangSnapshot --klicktest   (hela panelen: drar varje ratt och fader, dubbelklickar, stegar varje lista, trycker
+//                                knappar, spakar och tangenter i alla kammare och vyer, och kontrollerar parametrarna; OK/FEL)
 //
 // Copyright (C) 2026 KrangBox-teamet. Licens: AGPLv3, se LICENSE.
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -18,6 +20,9 @@
 #include "ui/ValueFormat.h"
 #include "ui/Jugend.h"
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "PluginProcessor.h"
+#include "PluginEditor.h"
+#include <set>
 #include <iostream>
 
 namespace
@@ -66,10 +71,273 @@ struct Attach
 };
 }
 
+
+// --- Klicktestet ---------------------------------------------------------------------------------
+// Öppnar den riktiga panelen med den riktiga processorn och klickar sig igenom allt, som en människa
+// skulle göra: i varje kammare och i vyerna STEGVERKET, MODULATION och KAOS. Varje ratt och fader dras
+// och dubbelklickas, varje lista stegas genom alla sina val (och det som då visas testas också), varje
+// knapp och spak trycks, och keyboardet spelas. Till sist: alla parametrar som ska nås från panelen.
+namespace klick
+{
+    struct Recorder : juce::AudioProcessorParameter::Listener
+    {
+        std::set<int> changed, ever;
+        void parameterValueChanged (int index, float) override { changed.insert (index); ever.insert (index); }
+        void parameterGestureChanged (int, bool) override {}
+    };
+
+    juce::MouseEvent event (juce::Component& c, juce::Point<float> pos, juce::Point<float> downPos, int clicks, bool dragged)
+    {
+        auto src = juce::Desktop::getInstance().getMainMouseSource();
+        const auto now = juce::Time::getCurrentTime();
+        return juce::MouseEvent (src, pos, juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier), 1.0f,
+                                 juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                 juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                 &c, &c, now, downPos, now, clicks, dragged);
+    }
+
+    bool showing (juce::Component& c)
+    {
+        // Panelen ligger inte på skärmen här: allt under editorn räknas, editorn själv är roten.
+        for (auto* p = &c; p != nullptr && dynamic_cast<juce::AudioProcessorEditor*> (p) == nullptr; p = p->getParentComponent())
+            if (! p->isVisible()) return false;
+        return true;
+    }
+
+    template <typename T>
+    void collect (juce::Component& root, std::vector<T*>& out, bool includeHidden = false)
+    {
+        for (auto* child : root.getChildren())
+        {
+            if (auto* t = dynamic_cast<T*> (child))
+                if (includeHidden || showing (*t)) out.push_back (t);
+            collect (*child, out, includeHidden);
+        }
+    }
+
+    // Var reglaget sitter: närmaste panel med namn (klassnamnet) och läget i den.
+    juce::String where (juce::Component& c)
+    {
+        juce::Component* panel = c.getParentComponent();
+        while (panel != nullptr && panel->getParentComponent() != nullptr
+               && dynamic_cast<juce::AudioProcessorEditor*> (panel->getParentComponent()->getParentComponent()) == nullptr)
+            panel = panel->getParentComponent();
+        juce::String cls = panel != nullptr ? juce::String (typeid (*panel).name()) : juce::String ("?");
+        cls = cls.fromLastOccurrenceOf ("ui", false, false).trimCharactersAtStart ("0123456789").upToFirstOccurrenceOf ("E", false, false);
+        const auto pos = panel != nullptr ? panel->getLocalPoint (&c, c.getLocalBounds().getCentre()) : c.getPosition();
+        return cls + " @" + juce::String (pos.x) + "," + juce::String (pos.y);
+    }
+}
+
+int runKlicktest()
+{
+    using namespace juce;
+    std::cout << std::unitbuf;
+    KrangBoxProcessor processor;
+    processor.prepareToPlay (48000.0, 256);
+    std::unique_ptr<AudioProcessorEditor> editor (processor.createEditor());
+    editor->setSize (1200, 840);
+    auto& params = processor.getParameters();
+    klick::Recorder rec;
+    for (auto* p : params) p->addListener (&rec);
+    auto pid = [&] (int i) { if (auto* r = dynamic_cast<RangedAudioParameter*> (params[i])) return r->getParameterID(); return String (i); };
+
+    int ok = 0, fel = 0;
+    auto check = [&] (bool good, const String& what)
+    {
+        (good ? ok : fel)++;
+        if (! good) std::cout << what << "  FEL\n";
+    };
+
+    std::set<Component*> tested;
+    std::set<String> sliderParams, comboParams;
+
+    auto testSlider = [&] (Slider& s)
+    {
+        if (! s.isEnabled()) return;
+        s.setPopupDisplayEnabled (false, false, nullptr);   // värderutan är ett eget fönster; här finns ingen skärm
+        const auto b = s.getLocalBounds().toFloat();
+        const auto c = b.getCentre();
+        rec.changed.clear();
+        const double before = s.getValue();
+        s.mouseDown (klick::event (s, c, c, 1, false));
+        for (int k = 1; k <= 6; ++k)
+        {
+            const auto p = c + Point<float> (8.0f * (float) k, -10.0f * (float) k);
+            s.mouseDrag (klick::event (s, p, c, 1, true));
+        }
+        s.mouseUp (klick::event (s, c + Point<float> (48.0f, -60.0f), c, 1, true));
+        bool moved = std::abs (s.getValue() - before) > 1.0e-9;
+        if (! moved)   // stod redan i toppen: dra åt andra hållet
+        {
+            s.mouseDown (klick::event (s, c, c, 1, false));
+            for (int k = 1; k <= 6; ++k) s.mouseDrag (klick::event (s, c + Point<float> (-8.0f * (float) k, 10.0f * (float) k), c, 1, true));
+            s.mouseUp (klick::event (s, c, c, 1, true));
+            moved = std::abs (s.getValue() - before) > 1.0e-9;
+        }
+        const auto name = klick::where (s);
+        check (moved, "ratt " + name + ": rör sig inte när man drar");
+        check (rec.changed.size() == 1, "ratt " + name + ": ändrar " + String ((int) rec.changed.size()) + " parametrar (ska vara 1)");
+        if (rec.changed.size() != 1) return;
+        const int index = *rec.changed.begin();
+        sliderParams.insert (pid (index));
+        // Dubbelklick ska ge parameterns standardvärde.
+        s.mouseDoubleClick (klick::event (s, c, c, 2, false));
+        auto* rp = dynamic_cast<RangedAudioParameter*> (params[index]);
+        const bool atDefault = rp != nullptr && std::abs (rp->getValue() - rp->getDefaultValue()) < 0.002f;
+        check (atDefault, "ratt " + name + " (" + pid (index) + "): dubbelklick ger inte standardvärdet");
+    };
+
+    auto testToggle = [&] (Component& t)
+    {
+        rec.changed.clear();
+        const auto b = t.getLocalBounds().toFloat();
+        for (float y : { b.getBottom() - 3.0f, b.getY() + 3.0f })   // nedre läget och tillbaka till det övre
+        {
+            const Point<float> p (b.getCentreX(), y);
+            t.mouseDown (klick::event (t, p, p, 1, false));
+            t.mouseUp (klick::event (t, p, p, 1, false));
+        }
+        check (! rec.changed.empty(), "spak " + klick::where (t) + ": ändrar ingen parameter");
+        for (int i : rec.changed) comboParams.insert (pid (i));
+    };
+
+    std::function<void (Component&)> sweep;
+    auto testCombo = [&] (ComboBox& cb, bool hidden)
+    {
+        const int n = cb.getNumItems();
+        if (n < 2) return;
+        const int original = cb.getSelectedItemIndex();
+        rec.changed.clear();
+        std::set<int> touched;
+        for (int i = 0; i < n; ++i)
+        {
+            cb.setSelectedItemIndex (i, sendNotificationSync);
+            for (int c : rec.changed) touched.insert (c);
+            rec.changed.clear();
+            if (! hidden) sweep (*editor);   // det som visas med det här valet (t.ex. Fasvridarens rattar)
+        }
+        cb.setSelectedItemIndex (jmax (0, original), sendNotificationSync);
+        rec.changed.clear();
+        const auto name = klick::where (cb) + " (" + cb.getItemText (0) + " …)";
+        check (! touched.empty(), "lista " + name + ": ändrar ingen parameter");
+        for (int i : touched) comboParams.insert (pid (i));
+    };
+
+    sweep = [&] (Component& root)
+    {
+        for (int pass = 0; pass < 3; ++pass)
+        {
+            std::vector<Slider*> sliders;   klick::collect (root, sliders);
+            std::vector<ComboBox*> combos;  klick::collect (root, combos, true);
+            std::vector<krang::ui::KrangToggle*> toggles; klick::collect (root, toggles);
+            bool any = false;
+            for (auto* s : sliders)
+                if (tested.insert (s).second) { testSlider (*s); any = true; }
+            for (auto* t : toggles)
+                if (tested.insert (t).second) { testToggle (*t); any = true; }
+            for (auto* cb : combos)
+            {
+                // Dolda listor räknas bara när föräldern syns: de nås via en meny (Hammarverkets ljud per spår).
+                const bool hidden = ! klick::showing (*cb);
+                if (hidden && (cb->getParentComponent() == nullptr || ! klick::showing (*cb->getParentComponent()))) continue;
+                if (tested.insert (cb).second) { testCombo (*cb, hidden); any = true; }
+            }
+            if (! any) break;
+        }
+    };
+
+    // Vyknapparna och kammarväljaren hittas efter text och innehåll, inte efter namn i koden.
+    std::vector<TextButton*> buttons; klick::collect (*editor, buttons, true);
+    auto button = [&] (const String& text) -> TextButton*
+    {
+        for (auto* b : buttons) if (b->getButtonText().startsWith (text)) return b;
+        return nullptr;
+    };
+    std::vector<ComboBox*> allCombos; klick::collect (*editor, allCombos, true);
+    ComboBox* chamberBox = nullptr;
+    for (auto* cb : allCombos) if (cb->getNumItems() >= 15 && cb->getItemText (14) == "Krigstuban") chamberBox = cb;
+    check (chamberBox != nullptr, "kammarväljaren hittas inte");
+    if (chamberBox == nullptr) return 2;
+    tested.insert (chamberBox);
+    auto* kammare = button ("KAMMARE");
+    // Ett knapptryck som en människa: växlar läget (för av/på- och vyknappar) och skickar klicket direkt.
+    auto press = [] (Button& b)
+    {
+        if (b.getClickingTogglesState()) b.setToggleState (! b.getToggleState() || b.getRadioGroupId() != 0, sendNotificationSync);
+        else b.triggerClick();
+    };
+    for (const char* v : { "KAMMARE", "STEGVERKET", "MODULATION", "KAOS" })
+        check (button (v) != nullptr, String ("vyknappen ") + v + " hittas inte");
+
+    for (int chamber = 0; chamber < 15; ++chamber)
+    {
+        chamberBox->setSelectedItemIndex (chamber, sendNotificationSync);
+        if (kammare != nullptr) press (*kammare);
+        for (int i = 0; i < 3; ++i) MessageManager::getInstance()->runDispatchLoopUntil (40);
+        const int before = ok + fel;
+        sweep (*editor);
+        // STEGVERKET hör till de melodiska kamrarna, så den testas i Basmålen.
+        if (chamber == 0)
+            if (auto* b = button ("STEGVERKET")) { press (*b); MessageManager::getInstance()->runDispatchLoopUntil (40); sweep (*editor); }
+        std::cout << "kammare " << chamberBox->getItemText (chamber) << ": " << (ok + fel - before) << " kontroller\n";
+    }
+    for (const char* v : { "MODULATION", "KAOS" })
+        if (auto* b = button (v))
+        {
+            press (*b);
+            MessageManager::getInstance()->runDispatchLoopUntil (40);
+            const int before = ok + fel;
+            sweep (*editor);
+            std::cout << "vyn " << v << ": " << (ok + fel - before) << " kontroller\n";
+        }
+    if (kammare != nullptr) press (*kammare);
+
+    // Knapparna med av/på (SPELA i Stegverken).
+    for (auto* b : buttons)
+        if (b->getClickingTogglesState() && b->getRadioGroupId() == 0)
+        {
+            rec.changed.clear();
+            press (*b); press (*b);
+            check (! rec.changed.empty(), "knappen " + b->getButtonText() + ": ändrar ingen parameter");
+            for (int i : rec.changed) comboParams.insert (pid (i));
+        }
+
+    // Keyboardet: det ska finnas, spela på processorns tangentbordsläge, och en ton därifrån ska höras.
+    // (Att klicka på tangenterna kräver en skärm och provas på Macen.)
+    {
+        std::vector<MidiKeyboardComponent*> kbs; klick::collect (*editor, kbs);
+        check (kbs.size() == 1, "keyboardet hittas inte");
+        if (auto* chamberParam = processor.state.getParameter ("chamber")) chamberParam->setValueNotifyingHost (0.0f);
+        AudioBuffer<float> buf (2, 256);
+        MidiBuffer midi;
+        float peak = 0.0f;
+        processor.keyboardState.noteOn (1, 48, 0.8f);
+        for (int b = 0; b < 40; ++b) { buf.clear(); midi.clear(); processor.processBlock (buf, midi); peak = jmax (peak, buf.getMagnitude (0, 256)); }
+        processor.keyboardState.noteOff (1, 48, 0.0f);
+        check (peak > 0.01f, "keyboardet: en ton från tangentbordet hörs inte");
+    }
+
+    // Täckningen: alla parametrar ska gå att nå från panelen (grind 3).
+    StringArray missing;
+    for (int i = 0; i < params.size(); ++i)
+        if (rec.ever.count (i) == 0) missing.add (pid (i));
+    check (missing.isEmpty(), "parametrar som inte nås från panelen: " + missing.joinIntoString (", "));
+    std::cout << "\nreglage provade: " << (int) tested.size() << ", parametrar nådda: " << (int) rec.ever.size()
+              << " av " << params.size() << "\n";
+    std::cout << "KrangSnapshot --klicktest: " << (ok + fel) << " kontroller, " << ok << " OK, " << fel << " FEL\n";
+    for (auto* p : params) p->removeListener (&rec);
+    editor.reset();
+    return fel == 0 ? 0 : 2;
+}
+
 int main (int argc, char* argv[])
 {
     if (argc < 2) { std::cerr << "Användning: KrangSnapshot <fil.png> [skala]\n"; return 1; }
     juce::ScopedJuceInitialiser_GUI gui;
+
+    if (juce::String (argv[1]) == "--klicktest")
+        return runKlicktest();
 
     // KrangSnapshot --stilprov-textur <fil.png>: Basmålen-modulen med dagens texturer och med stilprovets åldrade ytor.
     if (juce::String (argv[1]) == "--stilprov-textur" && argc > 2)
