@@ -1,3 +1,5 @@
+<img src="docs/ljudwerk.png" alt="Ljudwerk" width="240">
+
 # KrangBox
 
 *Dr. Krangs Patenterade Ljudmaskin* – en trasig synthbox från en dystopisk framtid, byggd av en uppfinnare ur en Jules Verne-roman, med klangfärger från gammal folkmusik.
